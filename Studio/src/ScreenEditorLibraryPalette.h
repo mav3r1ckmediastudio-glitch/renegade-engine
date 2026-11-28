@@ -15,9 +15,9 @@ namespace renegade::studio
 
     enum class ScreenToolboxAction : std::uint8_t
     {
-        None, StoryFlow, Text, Button, Image, Background,
+        None, StoryFlow, Text, Button, Image, Video, Carousel, Background,
         Panel, Heading, Duplicate, Grid, Snap, Progress, GlobalHud, ProjectInventory,
-        Icon, Divider, Spacer, Counter, PlayerHealthBar, PlayerHealthText, PlayerAmmoText, Group, HorizontalStack, VerticalStack, LayoutGrid, Toggle, Slider, Selector, TextInput, GameplayAttributes, PublishUiPackage, AdoptUiPackage, UiBudgets
+        Icon, Divider, Spacer, Counter, PlayerHealthBar, PlayerHealthText, PlayerAmmoText, Group, HorizontalStack, VerticalStack, LayoutGrid, Toggle, Slider, Selector, TextInput, GameplayAttributes, PublishUiPackage, AdoptUiPackage, UiBudgets, SaveUiPrefab, InsertUiPrefab, AnimatedVial, LiquidFill, WorldNavigation, LocationAnnouncement, AmmoCounter, Minimap, PlayerHurt
     };
 
     struct ScreenEditorLibraryScreen
@@ -31,6 +31,7 @@ namespace renegade::studio
         bool available = true;
         bool enabledInGame = true;
         std::string diagnostic;
+        std::string cameraLevelId, cameraLevelPath;
     };
 
     inline std::vector<std::pair<std::string,std::string>> ScreenDestinationChoices(const std::vector<ScreenEditorLibraryScreen>& entries)
@@ -71,7 +72,9 @@ namespace renegade::studio
             {"CHARACTERS", "Character stats"}, {"CHARACTERS", "NPC state"},
             {"COMBAT", "Health bar - current Player", ScreenToolboxAction::PlayerHealthBar},
             {"COMBAT", "Health text - current Player", ScreenToolboxAction::PlayerHealthText},
-            {"COMBAT", "Loaded ammo - current Player", ScreenToolboxAction::PlayerAmmoText},
+            {"COMBAT", "Ammo counter - equipped weapon", ScreenToolboxAction::AmmoCounter},
+            {"COMBAT", "Player hurt feedback", ScreenToolboxAction::PlayerHurt},
+            {"COMBAT", "Loaded ammo text - current Player", ScreenToolboxAction::PlayerAmmoText},
             {"EQUIPMENT", "Equipped item"}, {"EQUIPMENT", "Ability slots"},
             {"INVENTORY", "Inventory slots"}, {"PROGRESSION", "Experience"},
             {"OBJECTIVES", "Quest state"}, {"WORLD", "World state"},
@@ -83,14 +86,22 @@ namespace renegade::studio
             {"BASIC", "Text", ScreenToolboxAction::Text},
             {"BASIC", "Heading", ScreenToolboxAction::Heading},
             {"BASIC", "Image", ScreenToolboxAction::Image},
+            {"BASIC", "Video", ScreenToolboxAction::Video},
+            {"BASIC", "Carousel", ScreenToolboxAction::Carousel},
             {"BASIC", "Progress Bar", ScreenToolboxAction::Progress},
-            {"BASIC", "Background", ScreenToolboxAction::Background},
+            {"BASIC", "Liquid Fill", ScreenToolboxAction::LiquidFill},
+            {"BASIC", "World navigation", ScreenToolboxAction::WorldNavigation},
+            {"BASIC", "Location name", ScreenToolboxAction::LocationAnnouncement},
+            {"BASIC", "Ammo counter", ScreenToolboxAction::AmmoCounter},
+            {"BASIC", "Minimap", ScreenToolboxAction::Minimap},
+            {"BASIC", "Player hurt feedback", ScreenToolboxAction::PlayerHurt},
+            {"BASIC", "Add background panel", ScreenToolboxAction::Background},
             {"BASIC", "Icon", ScreenToolboxAction::Icon}, {"BASIC", "Divider", ScreenToolboxAction::Divider}, {"BASIC", "Spacer", ScreenToolboxAction::Spacer},
             {"LAYOUT", "Group", ScreenToolboxAction::Group}, {"LAYOUT", "Horizontal Stack", ScreenToolboxAction::HorizontalStack},
             {"LAYOUT", "Vertical Stack", ScreenToolboxAction::VerticalStack},
             {"LAYOUT", "Grid", ScreenToolboxAction::LayoutGrid}, {"LAYOUT", "Tabs"},
             {"LAYOUT", "Scroll Area"}, {"LAYOUT", "Window"},
-            {"MEDIA", "Video"}, {"MEDIA", "Animated Image"},
+            {"MEDIA", "Animated Image"},
             {"MEDIA", "Animation Player"}, {"MEDIA", "Sequence"},
             {"DATA", "Radial"},
             {"DATA", "Segmented"}, {"DATA", "Counter text - bind in Inspector", ScreenToolboxAction::Counter},
@@ -101,15 +112,17 @@ namespace renegade::studio
             {"INPUT", "Radio"},
             {"NAVIGATION", "Menu List"}, {"NAVIGATION", "Tab Bar"},
             {"NAVIGATION", "Breadcrumbs"}, {"NAVIGATION", "Pagination"},
+            {"GAMEPLAY", "Animated vial", ScreenToolboxAction::AnimatedVial},
             {"GAMEPLAY", "Health bar - current Player", ScreenToolboxAction::PlayerHealthBar},
             {"GAMEPLAY", "Health text - current Player", ScreenToolboxAction::PlayerHealthText},
             {"GAMEPLAY", "Loaded ammo - current Player", ScreenToolboxAction::PlayerAmmoText},
             {"GAMEPLAY", "Inventory"}, {"GAMEPLAY", "Ability"},
-            {"GAMEPLAY", "Quest"}, {"GAMEPLAY", "Minimap"},
+            {"GAMEPLAY", "Quest"}, {"GAMEPLAY", "Minimap", ScreenToolboxAction::Minimap},
             {"FEEDBACK", "Tooltip"}, {"FEEDBACK", "Notification"},
             {"FEEDBACK", "Popup"}, {"FEEDBACK", "Modal"},
             {"FEEDBACK", "Loading"},
-            {"REUSABLE", "Linked Component"}, {"REUSABLE", "Saved Component"}
+            {"REUSABLE", "Linked Component"}, {"REUSABLE", "Saved UI prefabs...", ScreenToolboxAction::InsertUiPrefab},
+            {"REUSABLE", "Save selected as UI prefab", ScreenToolboxAction::SaveUiPrefab}
         };
         static const std::vector<ScreenToolboxEntry> globals = {
             {"CANVAS", "Toggle Grid", ScreenToolboxAction::Grid},

@@ -721,7 +721,11 @@ namespace renegade::bridge
 
     bool SceneService::LoadScene(const std::string& filePath)
     {
-        auto prepared = PrepareWickedSceneOpen(filePath);
+        return LoadPreparedScene(PrepareWickedSceneOpen(filePath));
+    }
+
+    bool SceneService::LoadPreparedScene(PreparedSceneOpen&& prepared)
+    {
         if (!prepared.IsReady())
         {
             lastError_ = prepared.Error();

@@ -1,5 +1,8 @@
+#include "ScreenNavigationSerialization.h"
+#include "ScreenHurtSerialization.h"
 #include "renegade/bridge/ScreenService.h"
 #include "ScreenBindingPersistence.h"
+#include "renegade/bridge/AssetRegistryService.h"
 #include "ScreenAnimationPersistence.h"
 #include "ScreenTransitionPersistence.h"
 #include "ScreenControlPersistence.h"
@@ -213,6 +216,7 @@ namespace
         {
         case ScreenLayoutMode::Absolute: return "absolute";
         case ScreenLayoutMode::Anchored: return "anchored";
+        case ScreenLayoutMode::Manual: return "manual";
         default: return "unknown";
         }
     }
@@ -224,7 +228,32 @@ namespace
         using renegade::bridge::ScreenLayoutMode;
         if (value == "absolute") result = ScreenLayoutMode::Absolute;
         else if (value == "anchored") result = ScreenLayoutMode::Anchored;
+        else if (value == "manual") result = ScreenLayoutMode::Manual;
         else return false;
+        return true;
+    }
+
+    std::string CarouselCaptionHex(const std::string& text)
+    {
+        static constexpr char digits[]="0123456789abcdef";
+        std::string result;result.reserve(text.size()*2);
+        for(unsigned char c:text){result+=digits[c>>4];result+=digits[c&15];}
+        return result;
+    }
+    bool ReadCarouselCaption(const std::string& hex,std::string& text)
+    {
+        if(hex.size()%2 || hex.size()>32768)return false;
+        auto digit=[](char c)->int {
+            if(c>='0'&&c<='9')return c-'0';
+            if(c>='a'&&c<='f')return c-'a'+10;
+            if(c>='A'&&c<='F')return c-'A'+10;
+            return -1;
+        };
+        for(size_t i=0;i<hex.size();i+=2){
+            int a=digit(hex[i]),b=digit(hex[i+1]);
+            if(a<0||b<0)return false;
+            text+=char((a<<4)|b);
+        }
         return true;
     }
 
@@ -367,6 +396,9 @@ namespace renegade::bridge
             if (!ReadScreenDocument(path, projectId, screen, error))
                 return false;
             document.projectId = screen.envelope.projectId;
+            document.videoPaths.clear();
+            document.audioPaths.clear();
+            document.hintPaths.clear();
             document.imagePaths.clear();
             document.fontPaths.clear();
             document.screenPaths.clear();
@@ -398,11 +430,39 @@ namespace renegade::bridge
                 if (std::find(paths.begin(), paths.end(), path) == paths.end())
                     paths.push_back(path);
             };
+            std::optional<AssetRegistry> videoRegistry;
             for (const auto& widget : screen.widgets)
             {
+                if (!widget.hintListPath.empty()) addUnique(document.hintPaths,widget.hintListPath);
+                if (widget.video && !widget.video->assetId.empty())
+                {
+                    if (!videoRegistry)
+                    {
+                        auto dir=fs::u8path(path).parent_path();
+                        while (!dir.empty() && dir.filename()!="Content" && dir!=dir.parent_path()) dir=dir.parent_path();
+                        if (dir.filename()!="Content") {error="No Content root for screen video.";return false;}
+                        videoRegistry.emplace();
+                        if (!ReadAssetRegistry(dir.parent_path().generic_u8string(),projectId,*videoRegistry,error)) return false;
+                    }
+                    auto record=std::find_if(videoRegistry->records.begin(),videoRegistry->records.end(),
+                        [&](const auto& r){return r.assetId==widget.video->assetId && r.dependencyClass==DependencyClass::Video;});
+                    if (record==videoRegistry->records.end()) {error="Missing screen video asset: "+widget.video->assetId;return false;}
+                    addUnique(document.videoPaths,record->projectRelativePath);
+                }
                 if (widget.kind == ScreenWidgetKind::Image &&
                     !widget.resourcePath.empty())
                     addUnique(document.imagePaths, widget.resourcePath);
+                if (widget.carousel) for (const auto& entry:widget.carousel->entries) addUnique(document.imagePaths,entry.image);
+                if(widget.hurt)for(const auto& f:HurtResources()){const auto& path=(*widget.hurt).*(f.member);if(!path.empty())addUnique(f.audio?document.audioPaths:document.imagePaths,path);}
+                if(widget.navigation){auto config=*widget.navigation;for(const auto* path:NavigationResources(config))if(!path->empty())addUnique(document.imagePaths,*path);if(widget.style.text.fontResource!=BuiltinScreenFont)addUnique(document.fontPaths,widget.style.text.fontResource);}
+                if(widget.liquid)
+                {
+                    addUnique(document.imagePaths,widget.liquid->mask);
+                    if(!widget.liquid->decreaseSound.empty())addUnique(document.audioPaths,widget.liquid->decreaseSound);
+                    if(!widget.liquid->increaseSound.empty())addUnique(document.audioPaths,widget.liquid->increaseSound);
+                }
+                if (!widget.progressFrameResourcePath.empty()) addUnique(document.imagePaths,widget.progressFrameResourcePath);
+                if (!widget.progressFillResourcePath.empty()) addUnique(document.imagePaths,widget.progressFillResourcePath);
                 const ScreenVisualState* states[] = {
                     &widget.style.normal, &widget.style.hover,
                     &widget.style.pressed, &widget.style.focused,
@@ -647,7 +707,7 @@ namespace renegade::bridge
             auto layout=parentWidget!=widgets.end()?parentWidget->second->container:ScreenContainerLayout{};
             if(layout.compactBelowWidth>0&&layoutWidth<layout.compactBelowWidth)
             {layout.mode=layout.compactMode;layout.columns=layout.compactColumns;}
-            if(parentWidget!=widgets.end()&&layout.mode!=ScreenChildLayout::Free)
+            if(parentWidget!=widgets.end()&&layout.mode!=ScreenChildLayout::Free&&widget.layoutMode!=ScreenLayoutMode::Manual)
             {
                 if(!ValidateScreenContainerLayout(layout,error)){resolving.erase(id);return false;}
                 const std::size_t count=childCounts.at(widget.parentId);
@@ -668,7 +728,7 @@ namespace renegade::bridge
                 if(index/columns==rows-1)output.height=parent.y+parent.height-layout.padding-output.y;
 
             }
-            else if (widget.layoutMode == ScreenLayoutMode::Absolute)
+            else if (widget.layoutMode != ScreenLayoutMode::Anchored)
             {
                 output = {
                     parent.x + widget.rect.x,
@@ -879,6 +939,22 @@ namespace renegade::bridge
                 error = "The Runtime screen contains a widget with a malformed stable ID.";
                 return false;
             }
+            if (!widget.hintListPath.empty() && (document.schemaVersion<3 ||
+                widget.kind!=ScreenWidgetKind::Text || !IsContentRelativePath(widget.hintListPath)))
+            { error="A hint list requires a project text file and a Text element."; return false; }
+            if (widget.video && (document.schemaVersion < 3 || widget.kind != ScreenWidgetKind::Image ||
+                widget.cameraSource || (!widget.video->assetId.empty() && !IsValidStableId(widget.video->assetId))))
+            {
+                error = "Invalid screen video panel.";
+                return false;
+            }
+            if(widget.cameraSource && (!widget.backgroundPanel || !widget.parentId.empty() ||
+                widget.kind!=ScreenWidgetKind::Image || document.schemaVersion<3 ||
+                !IsValidStableId(widget.cameraSource->levelId) || !IsValidStableId(widget.cameraSource->cameraId) ||
+                !IsSafeRelativePath(widget.cameraSource->levelPathHint)))
+            {
+                error="Invalid background camera reference.";return false;
+            }
             if (!widgets.emplace(widget.id, &widget).second)
             {
                 error = "The Runtime screen contains duplicate widget ID: " +
@@ -919,7 +995,11 @@ namespace renegade::bridge
                     "' has invalid anchors.";
                 return false;
             }
-            if(widget.layoutMode==ScreenLayoutMode::Absolute&&
+            if(widget.layoutMode!=ScreenLayoutMode::Absolute&&widget.layoutMode!=ScreenLayoutMode::Anchored&&widget.layoutMode!=ScreenLayoutMode::Manual)
+            {error="Invalid Screen widget layout mode.";return false;}
+            if(widget.layoutMode==ScreenLayoutMode::Manual&&document.schemaVersion<3)
+            {error="Manual layout requires Screen v3.";return false;}
+            if(widget.layoutMode!=ScreenLayoutMode::Anchored&&
                 (!std::isfinite(widget.rect.x)||!std::isfinite(widget.rect.y)||
                  !std::isfinite(widget.rect.width)||!std::isfinite(widget.rect.height)||
                  widget.rect.width<=0||widget.rect.height<=0))
@@ -997,7 +1077,7 @@ namespace renegade::bridge
                 }
             }
 
-            if (widget.kind == ScreenWidgetKind::Text || IsScreenInteractive(widget.kind))
+            if (widget.navigation || widget.kind == ScreenWidgetKind::Text || IsScreenInteractive(widget.kind))
             {
                 const auto& text = style.text;
                 const bool builtinFont = text.fontResource == BuiltinScreenFont;
@@ -1041,6 +1121,36 @@ namespace renegade::bridge
                 { error = "Fill binding requires a Progress element."; return false; }
             }
 
+            if(widget.locationAnnouncement&&(widget.kind!=ScreenWidgetKind::Text||document.schemaVersion<3))
+            {error="Location announcements require a schema3 Text layer.";return false;}
+            if(widget.hurt&&(document.schemaVersion<3||widget.kind!=ScreenWidgetKind::Image||widget.navigation||widget.video||widget.carousel||widget.liquid||!ValidateHurtFeedback(*widget.hurt,error))){if(error.empty())error="Hurt feedback requires a schema 3 Image.";return false;}
+            if(widget.navigation)
+            {
+                if(document.schemaVersion<3||widget.kind!=ScreenWidgetKind::Image||!ValidateScreenNavigation(*widget.navigation,error))
+                {if(error.empty())error="Navigation requires an Image component and schema3.";return false;}
+                auto config=*widget.navigation;for(const auto* path:NavigationResources(config))if(!path->empty()&&!IsContentRelativePath(*path)){error="Navigation artwork must be project-contained.";return false;}
+            }
+            if(widget.liquid)
+            {
+                const auto& l=*widget.liquid;
+                if(document.schemaVersion<3||widget.kind!=ScreenWidgetKind::Progress||
+                    !IsContentRelativePath(l.mask)||!ValidateScreenLiquidNumbers(l)||
+                    (!l.decreaseSound.empty()&&!IsContentRelativePath(l.decreaseSound))||
+                    (!l.increaseSound.empty()&&!IsContentRelativePath(l.increaseSound)))
+                {error="Invalid animated liquid settings or resources.";return false;}
+            }
+            if (widget.carousel)
+            {
+                const auto& deck=*widget.carousel;
+                if (document.schemaVersion<3 || widget.kind!=ScreenWidgetKind::Image || widget.video || widget.cameraSource || deck.entries.size()>256 ||
+                    !std::isfinite(deck.seconds) || deck.seconds<0.5f || deck.seconds>3600)
+                {error="Invalid carousel playback settings.";return false;}
+                std::unordered_set<StableId> ids;
+                for (const auto& slide:deck.entries)
+                    if (!IsValidStableId(slide.id) || !ids.insert(slide.id).second || !IsContentRelativePath(slide.image) ||
+                        slide.caption.size()>16384 || slide.caption.find('\0')!=std::string::npos)
+                    {error="A carousel entry needs an image, unique ID and caption of at most 16384 bytes.";return false;}
+            }
             if(static_cast<int>(widget.imageFit)<0||static_cast<int>(widget.imageFit)>2)
             {error="Screen image fitting is invalid.";return false;}
             if(widget.localOnly&&(document.schemaVersion<3||widget.kind!=ScreenWidgetKind::Button))
@@ -1079,7 +1189,7 @@ namespace renegade::bridge
                 break;
 
             case ScreenWidgetKind::Text:
-                if (widget.text.empty() || !widget.resourcePath.empty() ||
+                if ((widget.text.empty() && !widget.carouselCaption) || !widget.resourcePath.empty() ||
                     !widget.actionId.empty())
                 {
                     error = "Runtime screen text '" + widget.name +
@@ -1106,6 +1216,16 @@ namespace renegade::bridge
                 error = "Screen element kind is unsupported.";
                 return false;
             }
+        }
+
+        std::unordered_set<StableId> captionParents;
+        for(const auto& widget:document.widgets) if(widget.carouselCaption)
+        {
+            const auto parent=widgets.find(widget.parentId);
+            if(document.schemaVersion<3 || widget.kind!=ScreenWidgetKind::Text ||
+                !widget.hintListPath.empty() || parent==widgets.end() || !parent->second->carousel ||
+                !captionParents.insert(widget.parentId).second)
+            {error="A carousel caption must be a single Text child of its carousel.";return false;}
         }
 
         if (needsControl && buttonCount == 0)
@@ -1376,10 +1496,55 @@ namespace renegade::bridge
                     section.Set("text", widget.text);
                     section.Set("resource", widget.resourcePath);
                     section.Set("action", widget.actionId);
+                    if (widget.carouselCaption) section.Set("carousel_caption",true);
+                    if(widget.locationAnnouncement)section.Set("location_announcement",true);
+                if(widget.hurt)detail::WriteHurt(section,*widget.hurt);
+                if(widget.navigation)detail::WriteNavigation(section,*widget.navigation);
+                if(widget.liquid)
+                {
+                    const auto& l=*widget.liquid;
+                    section.Set("liquid_mask",l.mask);section.Set("liquid_left",l.left);section.Set("liquid_right",l.right);
+                    section.Set("liquid_top",l.top);section.Set("liquid_bottom",l.bottom);section.Set("liquid_wave",l.wavePixels);
+                    section.Set("liquid_bubbles",l.bubbles);section.Set("liquid_animated",l.animated);
+                    section.Set("liquid_decrease_sound",l.decreaseSound);section.Set("liquid_increase_sound",l.increaseSound);
+                }
+                if (widget.carousel)
+                {
+                        const auto& deck=*widget.carousel;
+                        section.Set("carousel_count",static_cast<int>(deck.entries.size()));
+                        section.Set("carousel_seconds",deck.seconds);
+                        section.Set("carousel_shuffle",deck.shuffle);
+                        for (size_t i=0;i<deck.entries.size();++i)
+                        {
+                            const auto key="slide_"+std::to_string(i);
+                            section.Set((key+"_id").c_str(),deck.entries[i].id);
+                            section.Set((key+"_image").c_str(),deck.entries[i].image);
+                            section.Set((key+"_caption_hex").c_str(),CarouselCaptionHex(deck.entries[i].caption));
+                        }
+                    }
                     if(document.schemaVersion>=3)
                     {
                         section.Set("local_only",widget.localOnly);
                         section.Set("image_fit",static_cast<int>(widget.imageFit));
+                        if (!widget.hintListPath.empty()) section.Set("hint_list",widget.hintListPath);
+                        if (widget.video)
+                        {
+                            section.Set("video_asset", widget.video->assetId);
+                            section.Set("video_loop", widget.video->loop);
+                            section.Set("video_mute", widget.video->mute);
+                            section.Set("video_additive", widget.video->additive);
+                            section.Set("video_transparency",static_cast<int>(widget.video->transparency));
+                        }
+                        if(widget.backgroundPanel)section.Set("background_panel",true);
+                        if(widget.cameraSource)
+                        {
+                            const auto& source=*widget.cameraSource;
+                            section.Set("background_level",source.levelId);
+                            section.Set("background_level_path",source.levelPathHint);
+                            section.Set("background_camera",source.cameraId);
+                            section.Set("background_camera_name",source.cameraName);
+                            section.Set("background_slow_pan",source.slowPan);
+                        }
                         if(widget.transitionOverride)section.Set("transition_override",true);
                     }
                     if(IsScreenValueControl(widget.kind))detail::WriteScreenControl(section,widget);
@@ -1720,8 +1885,63 @@ namespace renegade::bridge
                 widget.visible = section.GetBool("visible");
                 widget.enabled = section.GetBool("enabled");
                 widget.text = section.GetText("text");
+                widget.locationAnnouncement=section.Has("location_announcement")&&section.GetBool("location_announcement");
                 widget.resourcePath = section.GetText("resource");
+                if (sourceSchema>=3) widget.hintListPath=section.GetText("hint_list");
+                if(section.Has("hurt_version")){if(sourceSchema<3||!detail::ReadHurt(section,widget.hurt.emplace())){error="Malformed hurt feedback component.";return false;}}
+                if(section.Has("navigation_version"))
+                {
+                    if(sourceSchema<3||!detail::ReadNavigation(section,widget.navigation.emplace()))
+                    {error="Malformed world navigation component.";return false;}
+                }
+                if(section.Has("liquid_mask"))
+                {
+                    if(sourceSchema<3){error="Liquid requires Screen schema 3.";return false;}
+                    auto& l=widget.liquid.emplace();l.mask=section.GetText("liquid_mask");
+                    if(!detail::ReadAnimationScalar(section,"liquid_left",l.left)||
+                        !detail::ReadAnimationScalar(section,"liquid_right",l.right)||
+                        !detail::ReadAnimationScalar(section,"liquid_top",l.top)||
+                        !detail::ReadAnimationScalar(section,"liquid_bottom",l.bottom)||
+                        !detail::ReadAnimationScalar(section,"liquid_wave",l.wavePixels)||
+                        !detail::ReadAnimationScalar(section,"liquid_bubbles",l.bubbles)||
+                        (section.GetText("liquid_animated")!="true"&&section.GetText("liquid_animated")!="false"))
+                    {error="Malformed animated liquid settings.";return false;}
+                    l.animated=section.GetBool("liquid_animated");
+                    l.decreaseSound=section.GetText("liquid_decrease_sound");l.increaseSound=section.GetText("liquid_increase_sound");
+                }
+                widget.carouselCaption=section.Has("carousel_caption") && section.GetBool("carousel_caption");
+                if (section.Has("carousel_count"))
+                {
+                    auto& deck=widget.carousel.emplace();
+                    const int count=section.GetInt("carousel_count");
+                    if (count<0 || count>256) {error="Invalid carousel entry count.";return false;}
+                    deck.shuffle=section.GetBool("carousel_shuffle");
+                    deck.seconds=section.GetFloat("carousel_seconds");
+                    for (int i=0;i<count;++i)
+                    {
+                        const auto key="slide_"+std::to_string(i);
+                        CarouselEntry entry{section.GetText((key+"_id").c_str()),section.GetText((key+"_image").c_str()),{}};
+                        if(!ReadCarouselCaption(section.GetText((key+"_caption_hex").c_str()),entry.caption))
+                        {error="Invalid carousel caption encoding.";return false;}
+                        deck.entries.push_back(std::move(entry));
+                    }
+                }
+                if (sourceSchema >= 3 && section.Has("video_asset"))
+                    widget.video = ScreenVideoPanel{section.GetText("video_asset"),section.GetBool("video_loop"),
+                        section.GetBool("video_mute"),section.GetBool("video_additive"),
+                        static_cast<VideoTransparency>(section.Has("video_transparency") ? std::clamp(section.GetInt("video_transparency"),0,3) : 0)};
+                if(sourceSchema>=3 && section.Has("background_level"))
+                {
+                    ScreenCameraSource camera;
+                    camera.levelId=section.GetText("background_level");
+                    camera.levelPathHint=section.GetText("background_level_path");
+                    camera.cameraId=section.GetText("background_camera");
+                    camera.cameraName=section.GetText("background_camera_name");
+                    camera.slowPan=section.GetBool("background_slow_pan");
+                    widget.cameraSource=std::move(camera);
+                }
                 widget.actionId = section.GetText("action");
+                if(sourceSchema>=3&&section.Has("background_panel"))widget.backgroundPanel=section.GetBool("background_panel");
                 if(sourceSchema>=3&&section.Has("image_fit")) {
                     const int fit=section.GetInt("image_fit");
                     if(fit<0||fit>2){error="Screen image fitting is invalid.";return false;}

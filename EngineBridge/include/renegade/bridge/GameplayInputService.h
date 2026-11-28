@@ -34,6 +34,7 @@ namespace renegade::bridge
         ToggleEquipment,
         CancelEquipment,
         OffHandUse,
+        Map,
         Count,
     };
 
@@ -59,6 +60,7 @@ namespace renegade::bridge
         PlayerInputFrame player;
         bool interactPressed = false;
         bool pausePressed = false;
+        bool mapPressed = false;
         bool resetPressed = false;
         bool firePressed = false;
         bool fireDown = false;

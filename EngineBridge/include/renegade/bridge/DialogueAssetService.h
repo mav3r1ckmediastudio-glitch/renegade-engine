@@ -6,6 +6,7 @@ namespace renegade::bridge
 inline constexpr const char *DialogueMetadataKey = "renegade.dialogue.asset";
 bool ResolveDialogueVoicePath(const std::string &root, const std::string &relative, std::string &absolute, std::string &error);
 // Adopt a creator's local recording into this project without overwriting clips.
+bool ImportUiClickSound(const std::string& root,const std::string& source,std::string& relative,std::string& error);
 bool ImportDialogueVoice(const std::string &root, const std::string &source, std::string &relative, std::string &error);
 bool SnapshotDialogueVoices(const std::string &sourceRoot, const std::string &destinationRoot, const DialogueDocument &, std::string &error);
 std::string DialogueAssetPath(const std::string &root, const std::string &id);

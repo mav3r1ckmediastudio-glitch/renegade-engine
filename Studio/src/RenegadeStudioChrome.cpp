@@ -10,7 +10,7 @@
 
 namespace
 {
-    constexpr std::array<int,6> popupItemCounts = {5,9,14,4,1,4};
+    constexpr std::array<int,6> popupItemCounts = {5,9,15,4,1,4};
     constexpr float TopBarHeight = 64.0f;
     constexpr float SceneTabsHeight = 34.0f;
     constexpr float BottomTabsHeight = 32.0f;
@@ -1613,6 +1613,17 @@ namespace renegade::studio
             // Dismissal owns the complete click, including hierarchy/canvas input.
             activeMenu_=-1;activeViewportMenu_=-1;
             pointerConsumed_=true;Deactivate();return;
+        }
+        // A popup owns its item press before splitters or hierarchy tracks below it.
+        if (HasOpenMenuPopup() && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            const int item=HitMenuItem(wi::input::GetPointer());
+            if(item>=0 && !(item/32==5 && item%32<2))
+            {
+                menuGesture_.Begin(item);
+                pointerConsumed_=true;
+                return;
+            }
         }
         const XMFLOAT4 layoutPointer = wi::input::GetPointer();
         const float inspectorEdge = width_ - inspectorWidth_ - assistantDockWidth_;
@@ -3299,9 +3310,9 @@ namespace renegade::studio
                             Action::SaveGroupPrefab,Action::UnpackGroup};
                         invoke(actions[item]);
                     }
-                    else if (menu == 2 && item >= 0 && item < 14)
+                    else if (menu == 2 && item >= 0 && item < 15)
                     {
-                        constexpr std::array<Action, 14> actions = {
+                        constexpr std::array<Action, 15> actions = {
                             Action::CreatePointLight,
                             Action::CreateSpotLight,
                             Action::CreateDirectionalLight,
@@ -3310,7 +3321,7 @@ namespace renegade::studio
                             Action::CreateDecal,
                             Action::CreateEnvironmentProbe,
                             Action::ImportStaticGlb, Action::CreateProjectile, Action::OpenDialogue,
-                            Action::CreateParticleEffect,Action::CreateNavigationGrid,Action::CreateZone,Action::OpenWeaponEditor};
+                            Action::CreateParticleEffect,Action::CreateNavigationGrid,Action::CreateZone,Action::CreateLocationZone,Action::OpenWeaponEditor};
                         invoke(actions[item]);
                     }
                     else if (menu == 3 && item >= 0 && item < 4)
@@ -3416,7 +3427,7 @@ namespace renegade::studio
                     {"DIRECTIONAL LIGHT", true}, {"RECTANGLE LIGHT", true},
                     {"CAMERA", true}, {"DECAL", true},
                     {"ENVIRONMENT PROBE", true}, {"IMPORT MODEL...", true}, {"PROJECTILE...", true}, {"DIALOGUE EDITOR...", true},
-                    {"PARTICLE EMITTER", true}, {"NAVIGATION GRID", true}, {"GAMEPLAY ZONE", true}, {"WEAPON EDITOR...", true}};
+                    {"PARTICLE EMITTER", true}, {"NAVIGATION GRID", true}, {"GAMEPLAY ZONE", true},{"LOCATION ZONE",true}, {"WEAPON EDITOR...",true}};
             }
             else if (activeMenu_ == 3)
             {

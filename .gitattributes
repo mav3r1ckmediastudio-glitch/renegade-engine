@@ -7,3 +7,6 @@ Library/Scripts/**/*.lua text eol=lf
 EngineBridge/patches/*.patch -whitespace
 
 EngineBridge/patches/TerrainPropArchive.patch text eol=lf
+
+# Portable UI manifests hash exact package bytes on every checkout.
+Studio/assets/ui/prefabs/** -text

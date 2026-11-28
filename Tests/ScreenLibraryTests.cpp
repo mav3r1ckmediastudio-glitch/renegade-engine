@@ -1,4 +1,6 @@
 #include "renegade/bridge/ScreenLibraryService.h"
+#include "renegade/bridge/ScreenPrefabService.h"
+#include "renegade/bridge/DependencyService.h"
 #include "renegade/bridge/ScreenThemeResolver.h"
 #include <filesystem>
 #include "json.hpp"
@@ -51,6 +53,36 @@ int main()
             reopened.focusOrder.size()==1 && reopened.focusOrder.front()==reopened.widgets.front().id)
             : (reopened.actions.empty() && reopened.focusOrder.empty()),
             "Standalone UI creation fabricated routing or omitted required controls");
+    }
+    // A reusable button group may route multiple controls to one outcome.
+    // Publication must preserve that shared action once, not reject duplicates.
+    {
+        ScreenDocument buttons;buttons.schemaVersion=3;buttons.usage=ScreenUsage::Menu;
+        buttons.envelope=CreateDocumentEnvelope(project,RuntimeScreenDocumentType,
+            "Content/UI/SharedAction.renegade-screen","Shared outcome prefab");
+        ScreenWidget group;group.id=GenerateStableId();group.kind=ScreenWidgetKind::Image;
+        group.name="Actions";group.rect={0,0,640,360};group.enabled=false;
+        group.style=MakeScreenWidgetStyleTemplate(group.kind,360);
+        buttons.widgets={group};buttons.actions={{"continue"}};
+        for(int i=0;i<2;++i){
+            ScreenWidget button;button.id=GenerateStableId();button.kind=ScreenWidgetKind::Button;
+            button.name=button.text=i==0?"Continue":"Continue alternative";button.parentId=group.id;
+            button.actionId="continue";button.rect={20.f+i*260,140,240,48};
+            button.style=MakeScreenWidgetStyleTemplate(button.kind,48);
+            buttons.focusOrder.push_back(button.id);buttons.widgets.push_back(button);
+        }
+        ScreenAuthoringSession author;
+        const auto path=(root/buttons.envelope.pathHint).generic_u8string();
+        const auto sharedPackage=root/"SharedActionPackage";
+        ScreenDocument published;
+        check(WriteScreenDocument(path,buttons,error)&&author.Open(path,project,error)&&
+            PublishScreenWidgetPrefab(root.generic_u8string(),author,group.id,sharedPackage.generic_u8string(),error)&&
+            InspectPortableScreenPackage(sharedPackage.generic_u8string(),published,error)&&
+            published.actions.size()==1&&published.widgets.size()==3&&
+            published.widgets[1].actionId=="continue"&&published.widgets[2].actionId=="continue",
+            "Button prefab lost a shared outcome or published duplicate actions");
+        // This isolated fixture must not affect the library catalogue checks.
+        std::filesystem::remove(root/buttons.envelope.pathHint);
     }
     ScreenDocument openedCreated;
     std::string resolvedPath,resolvedHint;
@@ -132,6 +164,50 @@ int main()
     const auto complexPackage=root/"ComplexPackage";
     check(PublishPortableScreenPackage(root.generic_u8string(),project,complexHud.envelope.documentId,
         complexHud.envelope.pathHint,complexPackage.generic_u8string(),error),"Linked/resource package publish");
+    // A layered health prefab must carry both progress artworks to another project.
+    // The source project/package can then disappear without breaking the adopted HUD.
+    auto vialHud=hud;vialHud.envelope=CreateDocumentEnvelope(project,RuntimeScreenDocumentType,
+        "Content/UI/Vial.renegade-screen","Layered health artwork");
+    ScreenWidget liquid;liquid.id=GenerateStableId();liquid.name="Vial liquid";
+    liquid.kind=ScreenWidgetKind::Progress;liquid.rect={40,40,160,240};
+    liquid.style=MakeScreenWidgetStyleTemplate(liquid.kind,240);
+    liquid.fillDirection=ScreenFillDirection::BottomToTop;
+    liquid.progressFrameResourcePath="Content/UI/VialFrame.png";
+    liquid.progressFillResourcePath="Content/UI/VialLiquid.png";
+    liquid.animations={{ScreenAnimationProperty::OffsetY,ScreenAnimationEasing::Smooth,
+        ScreenAnimationLoop::PingPong,0,{{0,0},{1,2}}}};
+    vialHud.widgets={liquid};
+    {std::ofstream frame(root/liquid.progressFrameResourcePath,std::ios::binary);frame<<"frame fixture";}
+    {std::ofstream fill(root/liquid.progressFillResourcePath,std::ios::binary);fill<<"fill fixture";}
+    check(WriteScreenDocument((root/vialHud.envelope.pathHint).generic_u8string(),vialHud,error),"Vial fixture write");
+    RuntimeScreenDependencyDocument vialDependencies;
+    check(MakeRuntimeScreenDependencyReader(project)((root/vialHud.envelope.pathHint).generic_u8string(),vialDependencies,error)&&
+        vialDependencies.imagePaths.size()==2,"Progress frame/fill omitted from typed dependency closure");
+    const auto vialPackage=root/"VialPackage";
+    check(PublishPortableScreenPackage(root.generic_u8string(),project,vialHud.envelope.documentId,
+        vialHud.envelope.pathHint,vialPackage.generic_u8string(),error),"Vial artwork publish");
+    ScreenPortableAdoptionResult vialAdopted;
+    check(AdoptPortableScreenPackage(destination.generic_u8string(),otherProject,vialPackage.generic_u8string(),
+        vialAdopted,error),"Vial artwork adoption");
+    std::filesystem::rename(vialPackage,root/"VialPackageOffline");
+    std::filesystem::rename(root/liquid.progressFrameResourcePath,root/"FrameOffline.png");
+    std::filesystem::rename(root/liquid.progressFillResourcePath,root/"LiquidOffline.png");
+    ScreenDocument adoptedVial;
+    const bool vialRead=!vialAdopted.documentId.empty()&&ReadScreenDocument((destination/vialAdopted.pathHint).generic_u8string(),
+        otherProject,adoptedVial,error)&&adoptedVial.widgets.size()==1;
+    check(vialRead,"Adopted vial reopen");
+    if(vialRead)
+    {
+        const auto& w=adoptedVial.widgets.front();
+        const auto exact=[&](const std::string& path,const char* expected){std::ifstream input(destination/path,std::ios::binary);
+            return std::string(std::istreambuf_iterator<char>(input),{})==expected;};
+        check(w.id!=liquid.id&&w.progressFrameResourcePath!=liquid.progressFrameResourcePath&&
+            w.progressFillResourcePath!=liquid.progressFillResourcePath&&
+            exact(w.progressFrameResourcePath,"frame fixture")&&exact(w.progressFillResourcePath,"fill fixture")&&
+            w.fillDirection==ScreenFillDirection::BottomToTop&&w.animations.size()==1&&
+            w.animations.front().loop==ScreenAnimationLoop::PingPong,
+            "Offline adopted progress artwork paths/bytes or animation were lost");
+    }
     const auto multiRollback=root/"MultiRollback";std::filesystem::create_directories(multiRollback/"Content/UI");
     check(!AdoptPortableScreenPackage(multiRollback.generic_u8string(),GenerateStableId(),complexPackage.generic_u8string(),
         rejected,error,[](ProjectDocumentTransactionStage stage,std::size_t index,const std::string&,std::string& e){

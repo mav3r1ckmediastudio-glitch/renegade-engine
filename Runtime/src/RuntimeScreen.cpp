@@ -1,3 +1,5 @@
+#include "RuntimeScreenCamera.h"
+#include "renegade/bridge/ScreenBackgroundPanel.h"
 #include "RuntimeScreen.h"
 #include <cmath>
 
@@ -428,6 +430,7 @@ namespace renegade::runtime
             requestSink_ = {};
             return false;
         }
+        mediaRevisions_.clear();
         animationTime_=0;presentationVisible_=true;
         transitionPolicy_=document.transitions;
         if(!transition_.Start(transitionPolicy_,reducedMotion_,error))
@@ -449,6 +452,28 @@ namespace renegade::runtime
             return;
         }
 
+        const auto& doc=controller.AuthoredDocument();
+        const auto& media=ScreenMediaOverrides();
+        const auto changes=media.find({doc.envelope.projectId,doc.envelope.documentId});
+        if (changes!=media.end()) for (const auto& [id,source]:changes->second)
+        {
+            if (mediaRevisions_[id]==source.revision) continue;
+            const auto* widget=controller.FindWidget(id);
+            if (widget) renderer_.SetWidgetMedia(id,source.authored?widget->video:source.video,
+                source.authored?widget->hintListPath:source.hints);
+            mediaRevisions_[id]=source.revision;
+        }
+        const auto& overrides=ScreenCameraOverrides();
+        const auto change=overrides.empty() ? overrides.end() : overrides.find({doc.envelope.projectId,doc.envelope.documentId});
+        if(change!=overrides.end() && change->second.revision!=renderer_.BackgroundCameraRevision())
+        {
+            for(const auto& widget:doc.widgets)if(bridge::IsScreenBackground(doc,widget))
+            {
+                renderer_.SetBackgroundCamera(widget.id,change->second.authored ? widget.cameraSource : change->second.source,change->second.revision,change->second.authored);
+                break;
+            }
+        }
+        if(presentationVisible_)renderer_.UpdateCameraFeed(uiDeltaTime);
         if(presentationVisible_&&std::isfinite(uiDeltaTime)&&uiDeltaTime>0)
         {animationTime_+=uiDeltaTime;transition_.Tick(uiDeltaTime,reducedMotion_);}
         renderer_.SetTransitionFrame(transition_.Frame());
@@ -606,6 +631,7 @@ namespace renegade::runtime
         requestSink_ = {};
         controller_ = nullptr;
         nextSequence_ = 1;
+        mediaRevisions_.clear();
         animationTime_=0;presentationVisible_=true;requestedInput_=true;
         transition_.Reset();transitionPolicy_={};
     }
@@ -705,6 +731,7 @@ namespace renegade::runtime
         {
             if(!controller_->ExecuteInteractions(request.widgetId,bridge::ScreenInteractionEvent::Activate,error))
             {wi::backlog::post("UI interaction rejected: "+error,wi::backlog::LogLevel::Warning);return;}
+            renderer_.PlayButtonClick(request.widgetId);
             RefreshVisualFocus(*controller_);
             if(const auto* widget=controller_->FindWidget(request.widgetId);widget&&!ShouldDispatchScreenAction(*widget,inventoryHost_))
                 return; // Atomic local UI actions succeeded; do not dispatch Flow.
@@ -757,6 +784,7 @@ namespace renegade::runtime
                 wi::backlog::LogLevel::Warning);
             return;
         }
+        renderer_.PlayButtonClick(request.widgetId);
         RefreshVisualFocus(*controller_);
         if(const auto* widget=controller_->FindWidget(request.widgetId);
            widget && !ShouldDispatchScreenAction(*widget,inventoryHost_)) {

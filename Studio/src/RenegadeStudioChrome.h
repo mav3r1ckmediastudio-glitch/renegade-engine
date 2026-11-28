@@ -319,7 +319,7 @@ namespace renegade::studio
             CreateEnvironmentProbe,
             ImportStaticGlb,
             CreateProjectile,
-            CreateZone,
+            CreateZone,CreateLocationZone,
             CreateParticleEffect,
             CreateNavigationGrid,
             Focus,

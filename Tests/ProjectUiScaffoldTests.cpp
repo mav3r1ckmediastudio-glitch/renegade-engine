@@ -1,9 +1,13 @@
+#include "renegade/bridge/ScreenClickSound.h"
+#include "renegade/bridge/DependencyService.h"
+#include "RuntimeScriptRuntime.h"
 #include "RuntimeBootstrap.h"
 #include "RuntimeFlow.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/ProjectUiScaffoldService.h"
 #include "renegade/bridge/StoryFlowScreenLifecycleService.h"
 #include "renegade/bridge/ScreenService.h"
+#include "renegade/bridge/ScreenBackgroundPanel.h"
 #include "renegade/bridge/ScreenLibraryService.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
 #include "renegade/bridge/StoryFlowAuthoringModel.h"
@@ -122,6 +126,22 @@ int main(int argc,char** argv)
         const auto audit=references.AuditScreenOutcomes(metadata.rootPath,metadata.projectId,flow,node.id);
         check(audit.succeeded,node.name+": "+audit.message);
     }
+    bridge::ScreenDocument title;
+    check(bridge::MakeProjectUiScaffoldTemplate(metadata.projectId,"Title",title,error),"Build editable Title");
+    const auto next=std::find_if(title.widgets.begin(),title.widgets.end(),[](const auto& w){return w.kind==bridge::ScreenWidgetKind::Button;});
+    bridge::ScreenRect titleButton;
+    check(next!=title.widgets.end()&&next->parentId.empty()&&
+        bridge::ResolveScreenWidgetRect(title,next->id,titleButton,error)&&
+        titleButton.width==360&&titleButton.height==64&&titleButton.x==460&&titleButton.y==592,
+        "Starter Continue is a normal-size freely editable button");
+    bridge::ScreenDocument loading;
+    const std::string loadingPath="Content/Screens/Loading.renegade-screen";
+    const bool loadingReady=bridge::ReadScreenDocument((root/loadingPath).generic_u8string(),metadata.projectId,loading,error);
+    check(loadingReady && loading.usage==bridge::ScreenUsage::Overlay && loading.widgets.size()==4 &&
+        loading.widgets[0].backgroundPanel && loading.widgets[1].video && loading.widgets[2].video &&
+        !loading.widgets[1].video->assetId.empty() && !loading.widgets[2].video->assetId.empty() &&
+        loading.widgets[2].video->additive && fs::is_regular_file(root/loading.widgets.back().hintListPath),
+        "Loading template reopens with two independent governed clips and hint list: "+error);
     int optionalCount=0;std::set<std::string> identities;
     for(const auto& item:fs::recursive_directory_iterator(root/"Content/Screens"))
     {
@@ -131,14 +151,14 @@ int main(int argc,char** argv)
         {check(false,error);continue;}
         check(identities.insert(screen.envelope.documentId).second,"Unique Screen document identity");
         if(!screen.enabledInGame)++optionalCount;
-        if(screen.usage!=bridge::ScreenUsage::Hud&&screen.enabledInGame)
+        if((screen.usage==bridge::ScreenUsage::Menu || screen.usage==bridge::ScreenUsage::Modal) && screen.enabledInGame)
             check(!screen.focusOrder.empty(),"Every enabled menu has an eligible control");
     }
     check(optionalCount==8,"Eight optional modules retained as disabled editable assets");
-    check(identities.size()==25,"Full editable Screen catalogue written");
+    check(identities.size()==26,"Full editable Screen catalogue written");
     // The same catalogue recreates every standard Screen, including disabled
     // optional capabilities, without copying project identities or widget IDs.
-    check(bridge::ProjectUiScaffoldTemplateNames().size()==25,"Complete reusable starter catalogue");
+    check(bridge::ProjectUiScaffoldTemplateNames().size()==26,"Complete reusable starter catalogue");
     for(const auto& name:bridge::ProjectUiScaffoldTemplateNames())
     {
         bridge::ScreenDocument restored,second;
@@ -197,6 +217,135 @@ int main(int argc,char** argv)
     check(!orphan.ApplyStep(noSession,fresh,resume,error)&&noSession.CurrentPath().empty(),"Missing retained session fails explicitly");
     if(!fixture)
     {
+        // Exercise the real project reader and production dependency collector:
+        // Build Game must retain click settings and both default/local clips.
+        {
+            const std::string defaultClip="Content/Audio/UI/default.wav",localClip="Content/Audio/UI/local.wav";
+            fs::create_directories(root/"Content/Audio/UI");
+            const unsigned char wave[]={'R','I','F','F',38,0,0,0,'W','A','V','E','f','m','t',' ',16,0,0,0,
+                1,0,1,0,0x44,0xac,0,0,0x88,0x58,1,0,2,0,16,0,'d','a','t','a',2,0,0,0,0,0};
+            for(const auto& clip:{defaultClip,localClip})
+                std::ofstream(root/clip,std::ios::binary).write(reinterpret_cast<const char*>(wave),sizeof(wave));
+            bridge::ScreenClickSounds sounds;sounds.projectDefault=defaultClip;
+            sounds.buttons[{bridge::GenerateStableId(),bridge::GenerateStableId()}]=localClip;
+            check(sounds.Save(metadata.rootPath,error),"Save project click settings for export: "+error);
+            bridge::ProjectDependencyProvider provider(bridge::MakeProjectDependencyReader());
+            const auto collect=[&](bridge::DependencyGraph& result){
+                bridge::DependencyCollector collector(metadata.rootPath);
+                if(!collector.RegisterProvider(provider,error)||
+                   !collector.AddRoot({fs::u8path(metadata.descriptorPath).filename().generic_u8string(),
+                     bridge::DependencyClass::ProjectDocument,bridge::DependencyRequirement::Required,"click export test"},error)||
+                   !collector.DiscoverTransitiveDependencies(error))return false;
+                result=collector.Graph();return true;
+            };
+            bridge::DependencyGraph clickGraph;
+            check(collect(clickGraph),"Collect project click dependencies: "+error);
+            const auto has=[&](const std::string& path,bridge::DependencyClass type){
+                return std::any_of(clickGraph.nodes.begin(),clickGraph.nodes.end(),[&](const auto& node){
+                    return node.projectRelativePath==path&&node.dependencyClass==type&&node.requirement==bridge::DependencyRequirement::Required;});
+            };
+            check(has("Content/UI/ButtonSounds.rui-audio",bridge::DependencyClass::Data)&&
+                  has(defaultClip,bridge::DependencyClass::Audio)&&has(localClip,bridge::DependencyClass::Audio),
+                  "Build Game omitted project click settings or default/local audio");
+            fs::rename(root/localClip,root/"local.offline");bridge::DependencyGraph missing;
+            check(collect(missing)&&std::any_of(missing.diagnostics.begin(),missing.diagnostics.end(),[&](const auto& d){
+                return d.code==bridge::DependencyDiagnosticCode::Missing&&d.path==localClip;}),
+                "Missing click clip was not a dependency diagnostic");
+            fs::rename(root/"local.offline",root/localClip);
+            {std::ofstream corrupt(bridge::ScreenClickSounds::Path(metadata.rootPath));corrupt<<"broken settings";}
+            bridge::ProjectDependencyDocument rejected;
+            check(!bridge::MakeProjectDependencyReader()(metadata.descriptorPath,rejected,error),
+                "Malformed click settings silently omitted from Build Game");
+            check(sounds.Save(metadata.rootPath,error),"Restore valid click settings");
+        }
+        std::map<std::string,std::string> targets;
+        bridge::ScreenDocument menu;
+        std::map<std::string,std::string> previousIds;
+        auto readBytes=[](const fs::path& path){
+            std::ifstream in(path,std::ios::binary);
+            return std::string(std::istreambuf_iterator<char>(in),{});
+        };
+        const auto hudBefore=readBytes(root/metadata.defaultHud);
+        for(const auto& node:flow.nodes)
+        {
+            if(node.kind!=bridge::FlowNodeKind::Screen || node.screenDocumentId==metadata.defaultHudId)continue;
+            bridge::ScreenDocument document;
+            if(!bridge::ReadScreenDocument((root/node.screenPathHint).generic_u8string(),metadata.projectId,document,error))continue;
+            const auto panel=std::find_if(document.widgets.begin(),document.widgets.end(),
+                [&](const auto& w){return bridge::IsScreenBackground(document,w);});
+            if(panel==document.widgets.end())continue;
+            if(menu.widgets.empty()){menu=document;continue;}
+            if(node.screenDocumentId!=menu.envelope.documentId && targets.size()<2)
+            {
+                targets.emplace(node.screenDocumentId,node.screenPathHint);
+                previousIds.emplace(node.screenDocumentId,panel->id);
+            }
+        }
+        check(!menu.widgets.empty() && targets.size()==2,"Stock screen backgrounds recognised");
+        if(!menu.widgets.empty() && targets.size()==2)
+        {
+            auto panel=*std::find_if(menu.widgets.begin(),menu.widgets.end(),
+                [&](const auto& w){return bridge::IsScreenBackground(menu,w);});
+            panel.imageFit=bridge::ScreenImageFit::Cover;
+            const auto cameraId=bridge::GenerateStableId();
+            const auto levelId=bridge::GenerateStableId();
+            panel.cameraSource=bridge::ScreenCameraSource{levelId,"Content/Scenes/Starter.wiscene",cameraId,"Overlook",true};
+            check(bridge::CopyScreenBackgrounds(metadata.rootPath,menu,panel,targets,error),"Copy selected backgrounds: "+error);
+            for(const auto& [id,path]:targets)
+            {
+                bridge::ScreenDocument saved;
+                check(bridge::ReadScreenDocument((root/path).generic_u8string(),metadata.projectId,saved,error)
+                    && !saved.widgets.empty() && saved.widgets.front().backgroundPanel
+                    && saved.widgets.front().cameraSource
+                    && saved.widgets.front().cameraSource->cameraId==cameraId
+                    && saved.widgets.front().cameraSource->levelId==levelId
+                    && saved.widgets.front().cameraSource->slowPan
+                    && saved.widgets.front().id==previousIds.at(id)
+                    && saved.widgets.front().imageFit==bridge::ScreenImageFit::Cover,
+                    "Reopen independent back layer, retaining target identity");
+            }
+            // Run the public Lua surface through the normal project script VM.
+            const auto screenPath=targets.begin()->second;
+            const std::string scriptPath="Content/Scripts/CameraModeTest.lua";
+            fs::create_directories((root/scriptPath).parent_path());
+            std::ofstream(root/scriptPath)
+                << "return {on_start=function() local camera=renegade.ui.background_camera; local screen='"
+                << screenPath << "'; local mode,level,id=camera(screen); assert(mode=='pan' and id=='"
+                << cameraId << "'); assert(camera(screen,'fixed')=='fixed'); assert(camera(screen)=='fixed');"
+                << "assert(camera(screen,'image')=='image'); assert(camera(screen,'authored')=='pan');"
+                << "local media=renegade.ui.screen_media; local loading='" << loadingPath
+                << "'; local panel='" << (loading.widgets.size()>1?loading.widgets[1].id:"") << "';"
+                << "assert(media(loading,panel).loop); assert(media(loading,panel,{loop=false,mute=false}).loop==false);"
+                << "assert(media(loading,panel,{transparency='soft_smoke'}).transparency=='soft_smoke');assert(media(loading,panel,'authored').transparency=='auto');assert(media(loading,panel,'authored').mute);end}";
+            auto scripts=bridge::CreateScriptDocument(metadata.projectId,bridge::GenerateStableId(),
+                "Content/Scenes/Starter.wiscene","camera-test");
+            bridge::ScriptSourceBinding binding;
+            binding.sourceId=bridge::GenerateStableId();binding.sourcePath=scriptPath;
+            binding.presentation=bridge::ScriptPresentation::GlobalScript;
+            binding.apiVersion=runtime::RuntimeScriptRuntime::ApiVersion;
+            binding.provenance.kind=bridge::ScriptProvenanceKind::Project;
+            binding.provenance.contentHash="camera-mode-test";
+            wi::scene::Scene privateScene;
+            runtime::RuntimeScriptRuntime vm;
+            check(bridge::AddScriptAttachment(scripts,bridge::CreateScriptAttachment(bridge::ScriptScope::Level,{},binding),error)
+                && vm.StartScene(scripts,privateScene,metadata.rootPath,error)
+                && vm.DisabledInstanceCount()==0 && vm.Diagnostics().empty(),"Camera modes through project Lua: "+error);
+            vm.StopScene();
+            auto second=std::next(targets.begin());
+            const auto secondBefore=readBytes(root/second->second);
+            panel.imageFit=bridge::ScreenImageFit::Contain;
+            const auto first=targets.begin();
+            check(bridge::CopyScreenBackgrounds(metadata.rootPath,menu,panel,
+                {{first->first,first->second}},error),"Replace one copied panel");
+            check(readBytes(root/second->second)==secondBefore,"Sibling copy retains its previous artwork settings");
+            const auto firstBefore=readBytes(root/first->second);
+            auto invalid=targets;
+            invalid.emplace(bridge::GenerateStableId(),"Content/Screens/Missing.renegade-screen");
+            check(!bridge::CopyScreenBackgrounds(metadata.rootPath,menu,panel,invalid,error)
+                && readBytes(root/first->second)==firstBefore && readBytes(root/second->second)==secondBefore,
+                "Invalid batch preserves all selected screen files");
+            check(readBytes(root/metadata.defaultHud)==hudBefore,"Unselected HUD byte-identical");
+        }
         bridge::StoryFlowNewScreenRequest request;request.projectRoot=metadata.rootPath;
         request.projectId=metadata.projectId;request.flowPath=(root/fs::u8path(metadata.startupFlow)).generic_u8string();
         request.flow=flow;request.screenName="Restored Graphics";request.screenPathHint="Content/Screens/RestoredGraphics.renegade-screen";

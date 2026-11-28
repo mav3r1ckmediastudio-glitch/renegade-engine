@@ -2,6 +2,8 @@
 #include "renegade/bridge/WeaponLoadout.h"
 #include "RuntimeGameplayAttributeWorld.h"
 #pragma once
+#include <future>
+#include "renegade/bridge/SceneDocumentService.h"
 
 #include <optional>
 #include "RuntimeDialogue.h"
@@ -44,6 +46,7 @@
 #include "RuntimeUiAccessibilityPreferences.h"
 #include "renegade/bridge/HudContextEventRules.h"
 #include "RuntimeHudSession.h"
+#include "renegade/bridge/MinimapCameraService.h"
 #include "renegade/bridge/HudSelection.h"
 #include "RuntimeScriptRuntime.h"
 #include "RuntimeInventorySession.h"
@@ -104,6 +107,8 @@ namespace renegade::runtime
         void SetBastionReticles(std::optional<XMFLOAT2> aim, std::optional<XMFLOAT2> barrel)
         { bastionAim_ = aim; bastionBarrel_ = barrel; }
         void SetProjectileContacts(std::vector<XMFLOAT2> contacts) { projectileContacts_=std::move(contacts); }
+        void SetHurtCameraShake(XMFLOAT2 offset){hurtShake_=offset;}
+        void RestoreHurtCamera();
         void ConfirmTargetHit() { hitConfirmSeconds_=0.12f; }
         void ClearHitConfirmation() { hitConfirmSeconds_=0; }
         void SetHeldFireballParticles(const std::array<wi::ecs::Entity,4>& entities) { heldFireballParticles_=entities; }
@@ -116,6 +121,7 @@ namespace renegade::runtime
         void Compose(wi::graphics::CommandList cmd) const override;
 
     private:
+        XMFLOAT2 hurtShake_={};XMFLOAT4X4 hurtCameraPose_={};bool hurtCameraApplied_=false;
         bridge::RiverUnderwaterRenderer riverUnderwater_;
         bridge::RiverFlowRenderer riverFlow_;
         bridge::PlaceableWaterfallRenderer waterfallRenderer_;
@@ -247,6 +253,13 @@ namespace renegade::runtime
         RuntimePropModelResidency propModels_;
         void RefreshUiBindingSources();
         void UpdateUiBindings();
+        void UpdateWorldNavigation(float dt);
+        void UpdateHurtFeedback(float dt);
+        bool SetWorldMapOpen(bool open,std::string& error);
+        RuntimeHudSession worldMapOverlay_;
+        bool worldMapOpen_=false,worldMapWasPaused_=false,worldMapCloseRequested_=false;
+        bridge::MinimapCameraService minimapCameras_;
+        std::set<std::string> actorNavigationTargets_;
         void UpdateLiveDiagnostics();
         std::uint64_t lastDiagnosticSampleMs_ = 0;
         std::uint64_t lastDiagnosticProjectileLaunched_ = 0;
@@ -255,6 +268,16 @@ namespace renegade::runtime
         RuntimeUiTimingWindow uiBindingCpuTiming_;
         bridge::ScreenPerformanceBudget uiBudget_;
         std::string uiBudgetDiagnostic_;
+        struct PendingLevelLoad
+        {
+            RuntimeActionRequest request;
+            RuntimeFlowController nextFlow;
+            bridge::FlowStepResult step;
+            std::future<bridge::PreparedSceneOpen> prepared;
+            std::uint64_t frames=0;
+        };
+        std::optional<PendingLevelLoad> pendingLevelLoad_;
+        void UpdateLoadingScreen(float dt);
         RuntimeFlowController flow_;
         RuntimeRenderPath renderer_;
         // Heap-stable instances allow transactional prepare/commit without
@@ -267,6 +290,7 @@ namespace renegade::runtime
         RuntimeUiAccessibilityPreferences uiAccessibility_;
         std::string uiAccessibilityPath_;
         RuntimeHudSession hudSession_;
+        screen::ScreenRenderer locationOverlay_;
         struct PendingHudSwitch
         {
             std::uint64_t revision=0;

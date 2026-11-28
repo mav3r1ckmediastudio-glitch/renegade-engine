@@ -2,6 +2,7 @@
 #include "renegade/screen/ScreenRenderer.h"
 #include "renegade/screen/ScreenTextLayout.h"
 #include "renegade/bridge/ScreenWidgetPresets.h"
+#include "renegade/bridge/HurtFeedbackService.h"
 
 #include <cmath>
 #include <filesystem>
@@ -148,6 +149,41 @@ int main()
         if(screen::ApplyScreenTransitionFrame(document,{0,0,1920,1080},{2,0,0,1},moved,error)||
             !Near(before.x,moved[1].logicalRect.x))
             return Fail("invalid transition frame partially changed hit geometry");
+    }
+    // Hurt overlays must cover the actual viewport at mismatched aspects.
+    // A 1280x720 Fit canvas previously left unshaded side/top strips.
+    {
+        auto hurtDoc=document;hurtDoc.schemaVersion=3;
+        auto hurt=bridge::MakePlayerHurtWidget(1280,720);
+        hurtDoc.widgets.push_back(hurt);
+        const bridge::ScreenRect viewports[]={
+            {0,0,1264,681},{0,0,1920,1009},{0,0,2560,1080},
+            {0,0,1024,768},{0,0,720,1280},{73,91,600,480}};
+        for(auto mode:{bridge::ScreenCanvasScaleMode::Fit,
+                       bridge::ScreenCanvasScaleMode::Fill,
+                       bridge::ScreenCanvasScaleMode::Stretch}){
+            hurtDoc.scaleMode=mode;
+            for(const auto& viewport:viewports){
+                std::vector<screen::ScreenRenderItem> result;
+                if(!screen::BuildScreenRenderItemsInViewport(hurtDoc,viewport,{},result,error))
+                    return Fail("hurt viewport layout failed");
+                const auto& rect=result.back().logicalRect;
+                if(!Near(rect.x,viewport.x)||!Near(rect.y,viewport.y)||
+                   !Near(rect.width,viewport.width)||!Near(rect.height,viewport.height))
+                    return Fail("hurt overlay left uncovered viewport edges");
+                bridge::ScreenCanvasTransform ordinary;
+                if(!bridge::ResolveScreenCanvasTransform(hurtDoc,viewport.width,viewport.height,ordinary,error)||
+                   !Near(result.front().logicalRect.x,viewport.x+ordinary.offsetX)||
+                   !Near(result.front().logicalRect.width,1280*ordinary.scaleX))
+                    return Fail("hurt viewport policy changed ordinary HUD layout");
+            }
+        }
+        hurtDoc.widgets.back().rect={128,72,640,360};
+        std::vector<screen::ScreenRenderItem> partial;
+        if(!screen::BuildScreenRenderItemsInViewport(hurtDoc,{40,60,1000,800},{},partial,error)||
+           !Near(partial.back().logicalRect.x,140)||!Near(partial.back().logicalRect.y,140)||
+           !Near(partial.back().logicalRect.width,500)||!Near(partial.back().logicalRect.height,400))
+            return Fail("custom hurt rectangle lost proportional viewport editing");
     }
     const auto& rendered = items[1];
     if (!Near(rendered.logicalRect.x, 660.0f) ||

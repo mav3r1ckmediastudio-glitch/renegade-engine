@@ -299,10 +299,12 @@ namespace renegade::studio
             {
                 draftLayout_ = draftLayout_ == bridge::ScreenLayoutMode::Absolute
                     ? bridge::ScreenLayoutMode::Anchored
-                    : bridge::ScreenLayoutMode::Absolute;
+                    : draftLayout_ == bridge::ScreenLayoutMode::Anchored
+                        ? bridge::ScreenLayoutMode::Manual : bridge::ScreenLayoutMode::Absolute;
                 layoutButton_.SetText(
                     draftLayout_ == bridge::ScreenLayoutMode::Absolute
-                        ? "LAYOUT: ABSOLUTE" : "LAYOUT: ANCHORED");
+                        ? "LAYOUT: ABSOLUTE" : draftLayout_ == bridge::ScreenLayoutMode::Manual
+                        ? "LAYOUT: MANUAL" : "LAYOUT: ANCHORED");
             });
             ConfigureInput(anchorMinXInput_, "Screen Anchor Min X", "ANCHOR MIN X");
             ConfigureInput(anchorMinYInput_, "Screen Anchor Min Y", "ANCHOR MIN Y");
@@ -455,6 +457,22 @@ namespace renegade::studio
         }
 
 
+        const bridge::ScreenColor* BasicPreviewColour() const noexcept
+        {
+            return previewBasicColour_ && colorPicker_.IsOpen() ? &colorPicker_.Colour() : nullptr;
+        }
+
+        void OpenBasicButtonState(unsigned state, bool colour)
+        {
+            if (!session_ || !workspace_ || state > 2) return;
+            selectedId_ = workspace_->SelectedWidgetId();
+            if (!Selected() || Selected()->kind != bridge::ScreenWidgetKind::Button) return;
+            state_ = static_cast<VisualState>(state);
+            RefreshFromSelection(true);
+            if (colour) OpenStateColor(!DraftVisual()->imageResourcePath.empty() || !Selected()->resourcePath.empty() ? ColorTarget::Tint : ColorTarget::Background, true);
+            else OpenStateImagePicker();
+        }
+
         void OpenAppearanceForSelection()
         {
             if (!session_ || !workspace_) return;
@@ -500,11 +518,11 @@ namespace renegade::studio
                 });
         }
 
-        void ChangeGraphicForSelection(bool allSlots) {
+        void ChangeGraphicForSelection(bool allSlots,bool useImageSource=false) {
             if(!session_||!workspace_)return;
             selectedId_=workspace_->SelectedWidgetId();
             RefreshFromSelection(true);
-            OpenComputerImage(false,0,true,allSlots);
+            OpenComputerImage(false,0,true,allSlots,useImageSource);
         }
         void OpenImageForSelection()
         {
@@ -538,7 +556,7 @@ namespace renegade::studio
             colorPicker_.SetLayout(
                 panelX_ + 12.0f, panelY_ + 82.0f,
                 std::max(280.0f, panelWidth_ - 24.0f),
-                std::min(340.0f, std::max(280.0f, panelHeight_ - 110.0f)));
+                std::clamp(panelHeight_ - 110.0f, 280.f, 424.f));
             gameplayAttributeInspector_.SetLayout(width_,height_);
             LayoutControls();
         }
@@ -586,7 +604,7 @@ namespace renegade::studio
             }
             if (colorPicker_.IsOpen())
             {
-                colorPicker_.Update();
+                colorPicker_.Update(canvas,dt);
                 return;
             }
             for (auto* widget : AllControls())
@@ -653,7 +671,7 @@ namespace renegade::studio
             dataInspector_.Render(canvas,cmd);
             ApplyScissor(canvas,scissorRect,cmd);
             choicePicker_.Render(cmd);
-            colorPicker_.Render(cmd);
+            colorPicker_.Render(canvas,cmd);
             ApplyScissor(canvas,scissorRect,cmd);gameplayAttributeInspector_.Render(canvas,cmd);
         }
 
@@ -956,7 +974,8 @@ namespace renegade::studio
             parentButton_.SetText("PARENT: " + ParentLabel(draftParent_));
             layoutButton_.SetText(
                 draftLayout_ == bridge::ScreenLayoutMode::Absolute
-                    ? "LAYOUT: ABSOLUTE" : "LAYOUT: ANCHORED");
+                    ? "LAYOUT: ABSOLUTE" : draftLayout_ == bridge::ScreenLayoutMode::Manual
+                        ? "LAYOUT: MANUAL" : "LAYOUT: ANCHORED");
             anchorMinXInput_.SetValue(Number(draftAnchors_.minimumX));
             anchorMinYInput_.SetValue(Number(draftAnchors_.minimumY));
             anchorMaxXInput_.SetValue(Number(draftAnchors_.maximumX));
@@ -1141,7 +1160,7 @@ namespace renegade::studio
         // Import through Renegade's actual governed texture pipeline, not a
         // stale absolute file path. The result becomes a project source asset
         // and a registered LP08 product that Build Game can resolve.
-        void OpenComputerImage(const bool stateImage, const int progressSlot = 0, const bool directGraphic = false, const bool allSlots = false)
+        void OpenComputerImage(const bool stateImage, const int progressSlot = 0, const bool directGraphic = false, const bool allSlots = false,const bool useImageSource=false)
         {
             if (!session_ || !session_->IsLoaded() ||
                 !Selected() || projectRoot_.empty()) return;
@@ -1157,13 +1176,13 @@ namespace renegade::studio
                                  "bmp", "dds", "hdr"};
             wi::helper::FileDialog(dialog,
                 [this, projectId, screenId, widgetId, root, stateImage,
-                 requestedVisualState, progressSlot, directGraphic, allSlots](const std::string& path)
+                 requestedVisualState, progressSlot, directGraphic, allSlots,useImageSource](const std::string& path)
                 {
                     if (path.empty()) return;
                     wi::eventhandler::Subscribe_Once(
                         wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                         [this, projectId, screenId, widgetId, root,
-                         stateImage, requestedVisualState, progressSlot, path, directGraphic, allSlots](std::uint64_t)
+                         stateImage, requestedVisualState, progressSlot, path, directGraphic, allSlots,useImageSource](std::uint64_t)
                         {
                             const auto report=[this,directGraphic](const std::string& message) {
                                 status_=message;
@@ -1272,7 +1291,7 @@ namespace renegade::studio
                             if (!widget) return;
                             if(directGraphic) {
                                 std::string graphicError;
-                                if(!session_->ChangeWidgetGraphic(widgetId,runtimeImage,allSlots,graphicError)) {
+                                if(!session_->ChangeWidgetGraphic(widgetId,runtimeImage,allSlots,graphicError,useImageSource)) {
                                     report(graphicError);return;
                                 }
                                 if(documentChanged_)documentChanged_();
@@ -1394,7 +1413,7 @@ namespace renegade::studio
                 });
         }
 
-        void OpenStateColor(const ColorTarget target)
+        void OpenStateColor(const ColorTarget target, bool commitImmediately = false)
         {
             const auto* widget = Selected();
             if (!widget) return;
@@ -1429,8 +1448,9 @@ namespace renegade::studio
             const auto widgetId = selectedId_;
             const auto screenId = session_->Document().envelope.documentId;
             const auto visualState = state_;
-            colorPicker_.Open(title, value,
-                [this, target, widgetId, screenId, visualState](const bridge::ScreenColor& color)
+            previewBasicColour_ = commitImmediately;
+            colorPicker_.Open(projectRoot_, title, value,
+                [this, target, widgetId, screenId, visualState, commitImmediately](const bridge::ScreenColor& color)
                 {
                     if (!session_ || !session_->IsLoaded() || selectedId_ != widgetId ||
                         session_->Document().envelope.documentId != screenId ||
@@ -1460,6 +1480,7 @@ namespace renegade::studio
                         draftStyle_.text.shadowColor = color;
                         shadowColorInput_.SetValue(ColorText(color));
                     }
+                    if (commitImmediately) CommitCreatorEdit(CurrentCreatorEdit(), "BUTTON COLOUR UPDATED");
                 });
         }
 
@@ -2090,6 +2111,7 @@ namespace renegade::studio
         std::vector<bridge::ScreenCreatorResourceChoice> imageResources_;
         std::vector<bridge::ScreenCreatorResourceChoice> fontResources_;
         RenegadeScreenChoicePicker choicePicker_;
+        bool previewBasicColour_ = false;
         RenegadeScreenColorPicker colorPicker_;
 
         RenegadeButton toggleButton_;

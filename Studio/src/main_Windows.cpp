@@ -1,4 +1,5 @@
 #include "StudioApplication.h"
+#include "StudioMultilineInputRoute.h"
 #include "WeaponEditor/WeaponWorkspace.h"
 #include "StartupIdentityHandshake.h"
 #include "StartupIrisTransition.h"
@@ -8,6 +9,7 @@
 #include "RenegadeLivingPresenceLaunch.h"
 
 #include <Windows.h>
+#include <shellapi.h>
 #include "renegade/bridge/NativeWindowSurface.h"
 
 #include <algorithm>
@@ -159,6 +161,23 @@ namespace
     {
         switch (message)
         {
+        case WM_DROPFILES:
+        {
+            HDROP drop=reinterpret_cast<HDROP>(wParam);
+            POINT point{};
+            if (DragQueryPoint(drop,&point) && application && windowReadyForWicked)
+            {
+                const UINT count=DragQueryFileW(drop,0xffffffff,nullptr,0);
+                for (UINT i=0;i<count;++i)
+                {
+                    std::wstring file(DragQueryFileW(drop,i,nullptr,0)+1,L'\0');
+                    file.resize(DragQueryFileW(drop,i,file.data(),static_cast<UINT>(file.size())));
+                    application->DropScreenVideo(std::filesystem::path(file).u8string(),float(point.x),float(point.y));
+                }
+            }
+            DragFinish(drop);
+            return 0;
+        }
         case WM_SIZE:
             if (startupIrisTransitionActive && startupIrisTransition != nullptr)
             {
@@ -243,6 +262,7 @@ namespace
             {
                 return 0;
             }
+            if(renegade::studio::RouteStudioMultilineCharacter(static_cast<wchar_t>(wParam)))return 0;
             if (wParam == VK_BACK)
             {
                 wi::gui::TextInputField::DeleteFromInput();
@@ -386,6 +406,7 @@ int APIENTRY wWinMain(
         return 2;
     }
 
+    DragAcceptFiles(window,TRUE);
     ShowWindow(window, showCommand == SW_HIDE ? SW_HIDE : SW_MAXIMIZE);
     UpdateWindow(window);
     LogGate2A(

@@ -40,7 +40,8 @@ namespace renegade::bridge
         bool NativeId(const std::string& id)
         {
             return id=="health.current"||id=="health.maximum"||id=="alive"||id=="ammo.loaded"||
-                id=="ammo.capacity"||id=="ammo.reserve"||id=="ammo.reloading"||id=="equipment.equipped";
+                id=="ammo.available"||id=="ammo.capacity"||id=="ammo.reserve"||id=="ammo.reloading"||
+                id=="equipment.equipped"||id=="equipment.name"||id=="equipment.slot"||id=="equipment.slots";
         }
     }
     bool ValidateGameplayAttributeDocument(const GameplayAttributeDocument& doc,const StableId& projectId,std::string& error)

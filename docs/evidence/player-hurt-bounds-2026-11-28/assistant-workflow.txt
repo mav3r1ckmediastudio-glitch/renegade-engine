@@ -1,0 +1,7 @@
+Source-evidence hashes refreshed.
+python Tests/AssistantWorkflowSuite.py --repo . --output BUILD/hurt-assistant-suite
+----------------------------------------------------------------------
+Ran 84 tests in 16.480s
+
+OK
+Exit code: 0

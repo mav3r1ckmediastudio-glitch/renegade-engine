@@ -1,5 +1,30 @@
 # Architecture
 
+## Per-element manual Screen geometry (27 November 2026)
+
+ScreenLayoutMode::Manual gives a child explicit parent-relative geometry while preserving its identity, parent and reserved automatic-layout slot. EngineBridge's shared resolver applies it to rendering and pointer geometry; sibling allocations retain the same count/order. Creator-directed UpdateWidgetManually atomically changes the mode and rectangle only on a geometry edit. Ordinary managed-content edits remain automatic. The basic Studio Inspector and resize gestures opt into this service, and coalesced history restores both geometry and layout authority on Undo. New Title templates use a normal free Continue button. See SCREEN_MANUAL_GEOMETRY.md for verification and limits. Interactive Preview return is an explicit presentation lifecycle change: invalidate the editor viewport cache on reattachment, restore clip/layout, finish input gestures and wait for Preview input release before resuming authoring.
+
+
+## Generic world navigation (27 November 2026)
+
+EngineBridge owns optional versioned ScreenNavigation data on ordinary Image widgets, pure bearing/projection/declutter functions, atomic ScreenAuthoringSession edits, portable resource remapping and the WorldNavigationService live registry. Appearance fields remain separate from target identity, heading/filter behaviour and geometry. Neutral and the available supplied fantasy example use the same component. The four full launch-set appearances remain a content/acceptance requirement.
+
+Studio supplies the shared native World navigation settings modal, ordinary palette/Inspector placement, owned artwork/font import and a private sample preview using the same ScreenRenderer. RuntimeScriptRuntime exposes the same service through C++ Navigation() and governed renegade.navigation Lua. Opaque EntityRef inputs resolve only against live-generation indexed native transforms; missing/deleted entities hide their markers. Registered entity IDs are cached; navigation does not discover targets by walking all scene entities every frame.
+
+RuntimeApplication::UpdateWorldNavigation publishes camera/player observers independently of UI binding-source availability, registers theme-resolved authored view prototypes and passes snapshots to the existing ScreenRenderer. Script-created views enter only the active HUD presenter. Configuration revisions preflight resources and reuse unchanged image/font handles; position/heading updates share one coherent snapshot per presenter. Level stop resets targets, views and handles. Navigation retains ordinary authored grouping and visibility binding semantics. Appearance changes share ApplyNavigationAppearanceDraft across authoring and live C++/Lua: existing category icon assignments win by default, and replacing the icon set requires an explicit keepAssignedIcons=false policy. No additional serialized format or separate custom-icon store is introduced.
+
+See UI_WORLD_NAVIGATION_AUTHORING.md, UI_WORLD_NAVIGATION_REQUIREMENTS.md and evidence/world-navigation-2026-11-27. Local Windows x64 DX12 Release evidence does not imply four-set completeness, exported-game acceptance or independent release validation.
+
+## UI scripting access requirement (27 November 2026)
+
+Every new UI capability must expose supported C++ and Lua access. Basic/Advanced controls and wizard-generated compositions use the same bridge-owned widget/layer/binding/state/effect capabilities available to scripts. Editor authoring preserves validation, project ownership and history; Runtime scripting updates live instances through documented contexts and lifecycle-safe identities/events. Scripting parity, examples and validation belong to feature acceptance. This records a requirement, not verified parity for existing or planned features. See UI_DESIGNER_GUIDANCE_RELEASE_REQUIREMENTS.md.
+
+## Animated liquid Screen prefabs (27 November 2026)
+
+Optional schema-3 ScreenLiquid belongs to EngineBridge's existing Screen document. The mask is a typed texture dependency and per-instance value-change cues are typed audio dependencies. Authoring changes colour, binding and effect settings in one history operation. ScreenPrefabService bakes a selected hierarchy and publishes the existing validated portable Screen package; compact resource paths keep repeated adoption bounded. Cross-project imports own their resources and expose unresolved gameplay slots rather than guessing gameplay identity.
+
+ScreenRenderer uses a per-widget compute output, animation clock and sound instance. A masked procedural surface and bubbles in any Progress fill direction respond to resolved progress fractions; an independent ordinary Image preserves the supplied glass/frame tint. The native Studio modal auditions only renderer state and resets it on close. Generic Liquid Fill is an unbound ordinary Progress component, not a new widget type. ScreenLiquidMaskService owns Windows WIC inspection, red-times-alpha bounds and project-owned mask import through the existing texture workflow/transaction service. ConfigureProgressFill commits optional effect, direction, tint and bindings together; mask replacement and full draft audition stay in the shared modal. Runtime consumes the same data and renderer. UI-only PCM recontainerization lives in EngineBridge import and preserves samples while keeping incompatible extended WAV headers away from Wicked's unchanged loader. See UI_ANIMATED_HEALTH_PREFAB_2026-11-27.md for verification and limits.
+
 ## Gameplay zones
 
 A zone is a named scene entity with a persistent ID, a transform and versioned local box bounds in WISCENE metadata. Studio places its origin on the picked surface. The Scene workspace owns the outline, six resize handles and inspector. Preset changes keep the bounds and identity. A zone contributes no render mesh or physics shape. In the Scene viewport its preset controls the outline colour, icon and nameplate. Nearby and selected zones take priority when labels overlap. Scale on a single zone edits its six faces. Numeric width and depth preserve the centre, and numeric height preserves the base. The review gallery stations use fixed-size local artwork at each zone origin.
@@ -2598,8 +2623,48 @@ The Vegetation bridge owns eight reviewed stock plant choices from seven shipped
 Choosing a stock preset changes only the brush. New versioned stock layers have independent native dimensions and layer-density metadata. Command-backed sliders edit the selected stock choice across the terrain and save its profile on the terrain metadata; global Custom controls skip those independent layers. Stock planting adds a species alongside existing vegetation; Custom retains replacement painting, and erasing applies to all species under the brush. Ground coverage uses each layer's saved density, preserving species ratios when grass is hidden and restored. Legacy layers keep shared settings without automatic migration. Density accepts up to 20 so the reviewed 25/50-tuft-per-square-metre starting settings are representable. Existing scenes are not migrated or restyled automatically. Native WISCENE stores final rectangles, colours, material, masks and emitter references; no external style metadata is required by the standalone player. The existing build content-directory copy includes the Presets subdirectory for Studio and Runtime. See MEADOW_GRASS_PRESETS.md for controls, validation and limits.
 
 
+## Location Zone / announcement integration, 27 November 2026
+
+Location (stable preset 13) extends the existing zone metadata and command/history model. WorldLocationService owns bounded per-Level targets and a serial announcement queue. Native locations are seeded before governed Lua starts, then refreshed through cached zone contacts and direct component lookup. WorldNavigationService projects these targets with per-target icon overrides independent of type and indexed target mutation. Location-name Text roles persist in screen schema 3 and use ScreenRenderer, including its fallback HUD layer. LocationProfile settings are exposed through C++ and renegade.locations. DependencyService includes location.icon metadata in explicit scene resource walks. Discovery is per-Level only; gameplay minimap and persistent discovery remain separate.
+
+
+### Location announcement font and rendering correction
+
+LocationAnnouncementSettings carries an optional project-owned TrueType font path; empty inherits the authored HUD Text family. Zone metadata uses location.font and the explicit scene dependency walk reports it as a Font resource. Native font choices reuse the governed UI font catalogue/import service; Lua register/configure/get exposes the same font value. Font styles are cached per announcement surface and leave the Text layer's size/colour/alignment authoritative.
+
+Wrapped location text applies motion to the aligned line origins. Glitch uses bounded short horizontal cuts with colour separation, sharing the same font/wrap layout as clean text; fade opacity uses smooth easing. Reduced motion removes spatial distortion and retains the fade. Captured native Runtime and native picker evidence is in evidence/location-text-effects-2026-11-27.
 ### Unified Studio model importer
 
 The source opens into an isolated viewport before the creator chooses Static Model, Animated Model, Character or Player Arms / Weapon. Character has Model, Materials and Actions pages. Additional clips are transferred in source space before the preview and library publication apply the same creator transform recipe to scene clones. The asset retains the recipe for reimport.
 
 The approved Edit Pose / IK design includes chain selection, target, pole, influence, original-pose comparison and reset/apply. Retargeting pairs the animation source with the imported character. Each rig has an independently editable reference pose. Suggested bone matches have visible status and manual overrides. Unmatched wings and tails require an explicit preserve-local/follow-parent choice before baking. The Character importer edits target reference poses in its private preview scene. Two-bone IK applies local joint rotations with world-space target and pole points and adjustable influence. A versioned .rpose file stores the stable bone hierarchy and edited local rotations separately from gameplay clips. The paired-rig Retargeting workspace remains pending.
+
+### Equipped-weapon ammo counter
+
+ScreenAmmoCounter constructs ordinary editable layers through ScreenAuthoringSession history, explicitly binding the possessed player's active firearm. RuntimeUiGameplaySnapshot and the host-backed Lua player.weapon_ammo query share CapturePlayerWeaponAmmo / PlayerWeaponAmmo. Existing 1–9 weapon-slot storage remains the ammunition authority. No new reserve or inventory owner exists. The stock parent is transparent, and native ammo availability hides the hierarchy for melee, spells and holstered presentations. Portable package adoption keeps its existing explicit gameplay reassignment policy. See UI_AMMO_COUNTER.md.
+
+
+## Minimap and illustrated-map extension (28 November 2026)
+
+ScreenNavigation optionally contains ScreenMinimap, preserving the old compass representation. WorldNavigationService remains the single owner of views, observers and target identity. BuildMinimapFrame projects world XZ using north-up or observer heading, filters nearby role categories and bounds marker count. Runtime samples known hostile Character records, sorts the closest 128 and follows registered entity targets through the existing ID index. Location Zone discovery/icon policy feeds both map and compass.
+
+MinimapCameraService owns up to four transient native orthographic CameraComponents. Their render_to_texture targets participate in Wicked's existing scene render pass; no cloned Scene, extra simulation or vendor changes are introduced. The shared ScreenRenderer projects artwork or native feed with an embedded DX12 compute shader and overlays interchangeable icon resources. Hidden views retire their owned cameras. Normal views default to 256 pixels/20Hz; the separate illustrated-map presentation uses 2048 pixels and caches unchanged artwork projections.
+
+Runtime's M overlay is a heap-stable RuntimeHudSession using the ordinary Screen controller/presenter and shared navigation snapshot. It fits calibrated artwork bounds, owns pointer/keyboard input while open, pauses gameplay and hides the normal HUD. Close restores the previous manual pause request. Pan/zoom are transient presentation state. The normal Screen schema owns settings and resource dependencies; portable remapping includes both artwork images and player/category icons. C++ model/service authoring and governed renegade.minimap / renegade.map share validation and ownership. See UI_MINIMAP_AUTHORING.md and the dated native receipts for scoped verification and release limits.
+
+## Player hurt feedback (28 November 2026)
+
+ScreenWidget optionally owns ScreenHurtFeedback in schema 3. Shared descriptors define validated flags, numeric fields and project resource keys for serialization, the native modal and governed Lua. ScreenAuthoringSession applies settings atomically through ordinary Screen history; portable publishing and adoption walk all six dependencies. Stock creation remains an ordinary transparent Image layer.
+
+PlayerHurtFeedbackSession receives accepted native combat damage, including legitimate NPC source bearings. Zone damage shares that accepted path without a bearing. HP sampling only supplies alive/low-health state; it never infers a hit from a value difference. Player/load/respawn lifecycles reset the bounded transient session. HurtFeedbackService shares authored and transient script-created views with the ScreenRenderer; resource/layout refresh is revision driven and per-frame state only advances presentation.
+
+ScreenHurtDrawing is shared by private Studio preview and Runtime. Procedural smooth edges and directional chevrons are replaceable with project artwork. Two bounded non-spatial sound voices provide rate-limited custom pain/heartbeat clips; no stock human audio is assigned. Pause/visibility/lifecycle clear the voices. Reduced motion disables flash/pulse/shake. Optional camera translation is applied in RuntimeRenderPath::PreRender after the final post-physics player/vehicle camera, before native visibility. The original pose is restored before subsequent gameplay/aim queries.
+
+The governed renegade.hurt contract exposes creation, atomic configuration, state, removal and explicit presentation-only hit/clear. It never uses hurt.hit to mutate health. Sixteen views/eight hits bound the service. No vendor source/gitlink change is part of this feature. See UI_PLAYER_HURT_FEEDBACK.md.
+
+Hurt viewport correction: shared render-item layout maps hurt rectangles to actual output dimensions independently of the ordinary HUD canvas transform. Full-design overlays cover mismatched-aspect viewport edges; partial rectangles retain proportional placement. Embedded previews add their viewport origin normally. See evidence/player-hurt-bounds-2026-11-28.
+
+
+## UI button audio export closure (28 November 2026)
+
+MakeProjectDependencyReader treats an existing ButtonSounds.rui-audio sidecar as required project Data and its configured default/per-button clips as required Audio. The sidecar is resolved inside the project before reading. Missing clips and malformed settings remain explicit dependency failures; an absent optional sidecar preserves prior projects. Studio, Test Game and Build Game therefore consume the same authored sound settings rather than relying on editor-only file discovery. ProjectUiScaffoldTests exercises the production collector.

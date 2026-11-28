@@ -292,6 +292,33 @@ namespace renegade::studio
                         error.clear();
                         return true;
                     });
+                screenEditor.OnPreviewRoute([this](const std::string& source,const std::string& action,
+                    StoryFlowScreenEditorHandoff& target,std::string& error){
+                    if(!authoringSession_.IsLoaded())return false;
+                    const auto& flow=authoringSession_.Document();
+                    for(const auto& route:flow.routes)
+                        if(route.sourceNodeId==source && route.outcome==action)
+                            for(const auto& node:flow.nodes)if(node.id==route.destinationNodeId)
+                            {
+                                if(node.kind!=bridge::FlowNodeKind::Screen)
+                                {error=node.name+" runs in Test Game";return false;}
+                                target.screenNodeId=node.id;
+                                target.screenDocumentId=node.screenDocumentId;
+                                return bridge::ResolveRuntimeScreenDocumentPath(activeProjectRoot_,flow.envelope.projectId,
+                                    node.screenDocumentId,node.screenPathHint,target.resolvedPath,error);
+                            }
+                    error="No screen destination for "+action;
+                    return false;
+                });
+                screenEditor.OnDestinationName([this](const std::string& action) -> std::string {
+                    if (!authoringSession_.IsLoaded()) return {};
+                    const auto& flow = authoringSession_.Document();
+                    for (const auto& route : flow.routes)
+                        if (route.sourceNodeId == screenEditorHandoff_.screenNodeId && route.outcome == action)
+                            for (const auto& node : flow.nodes)
+                                if (node.id == route.destinationNodeId) return node.name;
+                    return {};
+                });
                 screenEditor.OnOpenScreenRoute(
                     [this, &storyFlow](const bridge::ScreenDocument& screen,
                         const bridge::StableId& buttonId,
@@ -459,6 +486,7 @@ namespace renegade::studio
                           if(node.kind==bridge::FlowNodeKind::Level){
                               const auto resolved=bridge::StoryFlowLevelReferenceService{}.ResolveLevel(project.rootPath,project.projectId,authoringSession_.Document(),node.id);
                               target.available=resolved.succeeded;target.diagnostic=resolved.message;
+                              target.cameraLevelId=resolved.sceneDocumentId;target.cameraLevelPath=resolved.resolvedPathHint;
                           }
                           screens.push_back(std::move(target)); }
                         continue;

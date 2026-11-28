@@ -1,0 +1,8 @@
+AssistantWorkflowSuite
+Command: python Tests/AssistantWorkflowSuite.py --repo . --output BUILD/hurt-assistant-suite
+Refreshed normalized UTF-8 source-evidence hashes before running.
+----------------------------------------------------------------------
+Ran 84 tests in 15.957s
+
+OK
+Exit code: 0

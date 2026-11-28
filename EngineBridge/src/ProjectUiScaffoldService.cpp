@@ -1,9 +1,13 @@
+#include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/InventoryPagedScreenAdapter.h"
 #include "renegade/bridge/ProjectUiScaffoldService.h"
 #include "renegade/bridge/ScreenService.h"
 #include "renegade/bridge/StoryFlowLevelLifecycleService.h"
 #include "renegade/bridge/GameplayInputService.h"
 #include <filesystem>
+#include <fstream>
+#include <wiHelper.h>
+#include "renegade/bridge/CreatorVideoWorkflowService.h"
 #include <map>
 #include <algorithm>
 #include <vector>
@@ -54,7 +58,10 @@ namespace
             group.anchors={.06f,choices.size()<=2?.72f:.36f,.94f,.94f,0,0,0,0};
             group.container.mode=ScreenChildLayout::Grid;group.container.columns=2;
             group.container.padding=4;group.container.gap=12;
-            const auto parent=group.id;d.widgets.push_back(group);
+            const bool freePause = name == "Pause" || name == "Title";
+            const auto parent=group.id;
+            if (!freePause) d.widgets.push_back(group);
+            size_t index = 0;
             for(const auto& choice:choices)
             {
                 bool declared=false;for(const auto& action:d.actions)declared|=action.id==choice.action;
@@ -62,6 +69,12 @@ namespace
                 ScreenWidget button;button.id=GenerateStableId();button.kind=ScreenWidgetKind::Button;
                 button.name=choice.label;button.text=choice.label;button.actionId=choice.action;
                 button.enabled=choice.enabled;button.parentId=parent;button.rect={0,0,300,64};
+                if (freePause)
+                {
+                    button.parentId.clear();
+                    button.rect = {(d.designWidth - 360.0f) * 0.5f,
+                        (name == "Title" ? 592.0f : 256.0f) + static_cast<float>(index++) * 80.0f, 360.0f, 64.0f};
+                }
                 button.style=MakeScreenWidgetStyleTemplate(button.kind,64);
                 button.style.text.fontSize=20;button.style.text.wrap=true;
                 if(choice.enabled)d.focusOrder.push_back(button.id);
@@ -106,6 +119,36 @@ namespace
         {{"ui.back","RESUME"},{"options","OPTIONS"},{"main_menu","MAIN MENU"}},true,ScreenUsage::Modal);
     add("Death","Retry the Level or return to the main menu.",{{"retry","RETRY"},{"main_menu","MAIN MENU"}});
     add("Victory","Level complete.",{{"continue","FINISH"},{"main_menu","MAIN MENU"}});
+    add("Loading","Loading...",{},true,ScreenUsage::Overlay);
+    auto& loading=pages.back();
+    loading.schemaVersion=3;
+    auto& backdrop=loading.widgets.front();
+    backdrop.backgroundPanel=true;
+    backdrop.style.normal.background={0,0,0,255};
+    backdrop.style.disabled=backdrop.style.normal;
+    loading.widgets.erase(loading.widgets.begin()+1);
+    auto& hint=loading.widgets.back();
+    hint.name="Hint text";
+    hint.anchors={.1f,.79f,.9f,.95f,0,0,0,0};
+    hint.hintListPath="Content/UI/Hints/Loading.txt";
+    ScreenWidget showcase;
+    showcase.id=GenerateStableId();
+    showcase.kind=ScreenWidgetKind::Image;
+    showcase.name="Turning compass";
+    showcase.rect={100,132,400,400};
+    showcase.style=MakeScreenWidgetStyleTemplate(showcase.kind,400);
+    showcase.style.normal.background={0,0,0,0};
+    showcase.style.disabled=showcase.style.normal;
+    showcase.enabled=false;
+    showcase.video.emplace();
+    showcase.imageFit=ScreenImageFit::Contain;
+    auto smoke=showcase;
+    smoke.id=GenerateStableId();
+    smoke.name="Rising smoke";
+    smoke.rect={0,465,1280,255};
+    smoke.imageFit=ScreenImageFit::Stretch;
+    smoke.video->additive=true;
+    loading.widgets.insert(loading.widgets.begin()+1,{showcase,smoke});
     add("HUD","ESCAPE // PAUSE",{},true,ScreenUsage::Hud);
     // The starter HUD is a transparent, editable overlay. Values remain
     // designer-friendly fallbacks until a possessed Player exposes attributes.
@@ -164,7 +207,7 @@ const std::vector<std::string>& ProjectUiScaffoldTemplateNames()
 {
     static const std::vector<std::string> names={"Title","MainMenu","NewGame","SaveLoad","Options",
         "Graphics","Audio","Controls","Accessibility","AccessibilityMore","AccessibilityTargets",
-        "Credits","Exit","Pause","Death","Victory","HUD","Inventory","Trading","Crafting",
+        "Credits","Exit","Pause","Death","Victory","Loading","HUD","Inventory","Trading","Crafting",
         "Character","Skills","Journal","Map","Dialogue"};
     return names;
 }
@@ -188,6 +231,42 @@ bool MakeProjectUiScaffoldTemplate(const std::string& projectId,const std::strin
     error="The selected UI scaffold template is unavailable.";return false;
 }
 
+bool PopulateLoadingScreenMedia(const std::string& projectRoot,const StableId& projectId,
+    ScreenDocument& screen,std::string& error)
+{
+    namespace fs=std::filesystem;
+    const auto root=fs::u8path(projectRoot);
+    const auto stock=fs::u8path(wi::helper::GetExecutablePath()).parent_path()/"Content/UI/Loading";
+    AssetRegistry registry;
+    std::string diagnostic;
+    (void)ReadAssetRegistry(projectRoot,projectId,registry,diagnostic);
+    for (auto& widget:screen.widgets)
+    {
+        if (!widget.video) continue;
+        const std::string stem=widget.video->additive ? "RisingSmoke" : "TurningCompass";
+        const auto product="Content/Video/"+stem+".rasset";
+        const auto prior=std::find_if(registry.records.begin(),registry.records.end(),
+            [&](const AssetRecord& entry){return entry.projectRelativePath==product;});
+        if (prior!=registry.records.end() && fs::is_regular_file(root/product))
+        {
+            widget.video->assetId=prior->assetId;
+            continue;
+        }
+        const auto file=stock/(stem+".mp4");
+        if (!fs::is_regular_file(file)) continue;
+        const auto imported=CreatorVideoWorkflowService{}.ImportVideo(projectRoot,projectId,file.generic_u8string());
+        if (!imported.succeeded) {error=imported.error;return false;}
+        widget.video->assetId=imported.assetId;
+    }
+    const auto hints=root/"Content/UI/Hints/Loading.txt";
+    if (fs::exists(hints)) return true;
+    fs::create_directories(hints.parent_path());
+    std::ofstream list(hints,std::ios::binary);
+    list<<"Press Escape to open the pause menu.\nYou can adjust the interface in Options.\n";
+    list.close();
+    if (!list) {error="Could not write the starter hint list.";return false;}
+    return true;
+}
 bool SeedProjectUiScaffold(ProjectService& projects,std::string& error)
 {
     namespace fs=std::filesystem;
@@ -203,6 +282,7 @@ bool SeedProjectUiScaffold(ProjectService& projects,std::string& error)
     for(auto d:BuildScaffoldPages(project))
     {
         const auto name=fs::u8path(d.envelope.pathHint).stem().generic_u8string();
+        if (name=="Loading" && !PopulateLoadingScreenMedia(project.rootPath,project.projectId,d,error)) return false;
         if(d.enabledInGame)
         {
             FlowNode n;n.id=GenerateStableId();n.kind=FlowNodeKind::Screen;

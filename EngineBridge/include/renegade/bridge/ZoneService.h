@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/LocationAnnouncement.h"
 #include "renegade/bridge/IdentityService.h"
 #include <array>
 #include <cmath>
@@ -9,7 +10,7 @@ namespace renegade::bridge::zones
 {
     using Entity = wi::ecs::Entity;
     using Scene = wi::scene::Scene;
-    enum class Behaviour { Trigger, Win, Message, Objective, Checkpoint, Transition, Teleport, Health, Kill, Encounter, Dialogue, Ambience, Environment, Count };
+    enum class Behaviour { Trigger, Win, Message, Objective, Checkpoint, Transition, Teleport, Health, Kill, Encounter, Dialogue, Ambience, Environment, Location, Count };
     struct Preset
     {
         const char *label, *family, *source, *onEnter, *onExit, *targetLabel;
@@ -30,7 +31,8 @@ namespace renegade::bridge::zones
         {"Encounter / Spawn", "Encounter", "Content/Scripts/Library/renegade.zones.encounter/EncounterZone.lua", "zone.encounter.enter", "zone.encounter.exit", "Group / spawner", "Activation event", "", "activate", "", "", "", "", 0, 0},
         {"Dialogue", "Dialogue", "Content/Scripts/Library/renegade.zones.dialogue/DialogueZone.lua", "zone.dialogue.enter", "zone.dialogue.exit", "Speaker", "Dialogue asset", "Entry", "", "", "", "", "", 0, 0},
         {"Audio / Ambience", "Ambience", "Content/Scripts/Library/renegade.zones.ambience/AmbienceZone.lua", "zone.ambience.enter", "zone.ambience.exit", "Sound source", "", "", "", "", "", "", "Fade (s)", 0, 1},
-        {"Environment", "Environment", "Content/Scripts/Library/renegade.zones.environment/EnvironmentZone.lua", "zone.environment.enter", "zone.environment.exit", "", "", "", "", "", "Clear|Scattered|Overcast|Storm", "", "Blend (s)", 0, 2}
+        {"Environment", "Environment", "Content/Scripts/Library/renegade.zones.environment/EnvironmentZone.lua", "zone.environment.enter", "zone.environment.exit", "", "", "", "", "", "Clear|Scattered|Overcast|Storm", "", "Blend (s)", 0, 2},
+        {"Location Zone", "Location", "Content/Scripts/Library/renegade.zones.location/LocationZone.lua", "zone.location.enter", "zone.location.exit", "", "", "", "", "", "", "", "", 0, 0}
     }};
     inline const Preset& Info(Behaviour b) { return Presets.at(size_t(b)); }
 
@@ -41,6 +43,7 @@ namespace renegade::bridge::zones
         std::array<float, 3> high{1, 2, 1};
         Behaviour behaviour = Behaviour::Trigger;
         std::string primary, secondary;
+        LocationProfile location;
         int mode = 0, activation = 0, repeat = 0;
         float amount = 0, seconds = 0, cooldown = 1;
         std::string enter = "enter", exit = "exit", target;
@@ -69,6 +72,7 @@ namespace renegade::bridge::zones
         zone.amount = preset.amount;
         zone.seconds = preset.seconds;
         zone.mode = 0;
+        if(b==Behaviour::Location)zone.repeat=1;
     }
 
     inline bool IsZone(const Scene& scene, Entity id)
@@ -82,6 +86,7 @@ namespace renegade::bridge::zones
         for (size_t i = 0; i < 3; ++i)
             if (!std::isfinite(zone.low[i]) || !std::isfinite(zone.high[i]) ||
                 zone.high[i] <= zone.low[i]) return false;
+        if(zone.behaviour==Behaviour::Location){std::string error;if(!ValidateLocationProfile(zone.location,error))return false;}
         return true;
     }
 
@@ -108,6 +113,23 @@ namespace renegade::bridge::zones
         zone.enter = m.string_values.get("zone.enter");
         zone.exit = m.string_values.get("zone.exit");
         zone.target = m.string_values.get("zone.target");
+        if(zone.behaviour==Behaviour::Location){
+            auto& l=zone.location;auto& a=l.announcement;
+            if(m.string_values.has("location.type"))l.type=m.string_values.get("location.type");
+            if(m.string_values.has("location.icon"))l.icon=m.string_values.get("location.icon");
+            if(m.string_values.has("location.font"))a.font=m.string_values.get("location.font");
+            if(m.int_values.has("location.compass"))l.showOnCompass=m.int_values.get("location.compass")!=0;
+            if(m.int_values.has("location.discovered_only"))l.onlyAfterDiscovery=m.int_values.get("location.discovered_only")!=0;
+            if(m.int_values.has("location.announce"))a.enabled=m.int_values.get("location.announce")!=0;
+            if(m.int_values.has("location.repeat"))a.repeatOnReturn=m.int_values.get("location.repeat")!=0;
+            if(m.int_values.has("location.effect"))a.effect=LocationTextEffect(m.int_values.get("location.effect"));
+            if(m.float_values.has("location.range"))a.range=m.float_values.get("location.range");
+            if(m.float_values.has("location.duration"))a.duration=m.float_values.get("location.duration");
+            if(m.float_values.has("location.fade_in"))a.fadeIn=m.float_values.get("location.fade_in");
+            if(m.float_values.has("location.fade_out"))a.fadeOut=m.float_values.get("location.fade_out");
+            if(m.float_values.has("location.strength"))a.strength=m.float_values.get("location.strength");
+            if(m.float_values.has("location.speed"))a.speed=m.float_values.get("location.speed");
+        }
         return Valid(zone);
     }
 
@@ -132,6 +154,16 @@ namespace renegade::bridge::zones
         m.string_values.set("zone.enter", zone.enter);
         m.string_values.set("zone.exit", zone.exit);
         m.string_values.set("zone.target", zone.target);
+        if(zone.behaviour==Behaviour::Location){
+            const auto& l=zone.location;const auto& a=l.announcement;
+            m.string_values.set("location.type",l.type);m.string_values.set("location.icon",l.icon);m.string_values.set("location.font",a.font);
+            m.int_values.set("location.compass",l.showOnCompass);m.int_values.set("location.discovered_only",l.onlyAfterDiscovery);
+            m.int_values.set("location.announce",a.enabled);m.int_values.set("location.repeat",a.repeatOnReturn);m.int_values.set("location.effect",int(a.effect));
+            m.float_values.set("location.range",a.range);m.float_values.set("location.duration",a.duration);
+            m.float_values.set("location.fade_in",a.fadeIn);m.float_values.set("location.fade_out",a.fadeOut);
+            m.float_values.set("location.strength",a.strength);m.float_values.set("location.speed",a.speed);
+        }
+
     }
 
     inline bool Contains(const Definition& zone, DirectX::FXMMATRIX world, const XMFLOAT3& point)
@@ -178,13 +210,13 @@ namespace renegade::bridge::zones
     class Create final : public ICommand
     {
     public:
-        Create(Scene& scene, XMFLOAT3 position) : scene_(scene), position_(position) {}
+        Create(Scene& scene, XMFLOAT3 position,Behaviour behaviour=Behaviour::Trigger) : scene_(scene), position_(position),behaviour_(behaviour) {}
         Entity Id() const { return id_; }
         const StableId& PersistentId() const { return stableId_; }
         bool Execute() override
         {
             if (scene_.transforms.Contains(id_) || scene_.names.Contains(id_)) return false;
-            scene_.names.Create(id_).name = "Gameplay Zone";
+            scene_.names.Create(id_).name = behaviour_==Behaviour::Location?"New location":"Gameplay Zone";
             auto& transform = scene_.transforms.Create(id_);
             transform.Translate(position_);
             transform.UpdateTransform();
@@ -194,13 +226,14 @@ namespace renegade::bridge::zones
                 scene_.Entity_Remove(id_);
                 return false;
             }
-            Write(scene_, id_, {});
+            Definition definition;Choose(definition,behaviour_);Write(scene_, id_, definition);
             return true;
         }
         void Undo() override { scene_.Entity_Remove(id_); }
     private:
         Scene& scene_;
         XMFLOAT3 position_;
+        Behaviour behaviour_;
         Entity id_ = wi::ecs::CreateEntity();
         StableId stableId_ = GenerateStableId();
     };

@@ -1,3 +1,4 @@
+#include "renegade/bridge/ScreenClickSound.h"
 #include "renegade/bridge/GrassPalette.h"
 #include <map>
 #include <set>
@@ -571,6 +572,26 @@ namespace renegade::bridge
                 candidate.dependencyClass=DependencyClass::Data;candidate.requirement=DependencyRequirement::Required;
                 candidate.provenance="Project UI performance budgets";
                 document.alwaysInclude.push_back(std::move(candidate));
+            }
+            // Project button sounds are Runtime settings, not an editor-only
+            // palette. Include the sidecar and its explicitly typed audio paths
+            // even when those clips are not referenced by a scene SoundComponent.
+            const std::string clickPath="Content/UI/ButtonSounds.rui-audio";
+            const auto clickDependency=ResolveDependencyPath(metadata.rootPath,clickPath);
+            if(!clickDependency.accepted){error="Invalid project button sound settings path.";return false;}
+            if(clickDependency.exists){
+                const auto sounds=ScreenClickSounds::Read(metadata.rootPath);
+                if(!sounds.readError.empty()){error=sounds.readError;return false;}
+                const auto append=[&](const std::string& path,DependencyClass type){
+                    if(path.empty())return;
+                    DependencyCandidate candidate;candidate.declaredPath=path;candidate.dependencyClass=type;
+                    candidate.requirement=DependencyRequirement::Required;
+                    candidate.provenance="Project button click sounds";
+                    document.alwaysInclude.push_back(std::move(candidate));
+                };
+                append(clickPath,DependencyClass::Data);
+                append(sounds.projectDefault,DependencyClass::Audio);
+                for(const auto& entry:sounds.buttons)append(entry.second,DependencyClass::Audio);
             }
             if(!metadata.attributeDocumentId.empty())
             {

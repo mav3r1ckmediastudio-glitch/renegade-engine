@@ -58,6 +58,10 @@ static void VerifyZoneLibrary(wi::scene::Scene& scene, const StableId& owner)
             doc.attachments.front().enabled = false;
             Require(dispatch(true)==zones::EdgeEvent(behaviour,true),"Disabled zone executed a script");
             doc.attachments.front().enabled = true;
+            if(behaviour==zones::Behaviour::Location){
+                Require(dispatch(true)=="location.entered"&&dispatch(false)=="location.exited","Location entry/exit script events");
+                continue;
+            }
             if (!win && behaviour!=zones::Behaviour::Trigger)
             {
                 const std::string expected="zone.apply."+std::string(zones::EdgeEvent(behaviour,true)+5);
@@ -216,7 +220,7 @@ int main(int argc, char** argv)
             Require(output.IsOpen(), "Unable to create review scene");
             scene.Serialize(output);
         }
-        std::cout << "PASS rotated box, upper floor, adjacent room, non-solid anchor, history, preset wiring, WISCENE reopen, face ray picking, 13 presets, WISCENE settings, activation policies, independent projects and Lua behaviour\n";
+        std::cout << "PASS rotated box, upper floor, adjacent room, non-solid anchor, history, preset wiring, WISCENE reopen, face ray picking, 14 presets, WISCENE settings, activation policies, independent projects and Lua behaviour\n";
         return 0;
     }
     catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }

@@ -4,6 +4,12 @@
 #include "renegade/bridge/ResourceAssetCacheIdentityService.h"
 #include "renegade/bridge/ResourceAssetRuntimeService.h"
 
+#include <Utility/minimp4.h>
+#include <Utility/h264.h>
+#include "renegade/bridge/CreatorVideoWorkflowService.h"
+#include <wiHelper.h>
+#include <climits>
+#include <cstring>
 #include <algorithm>
 #include <filesystem>
 #include <utility>
@@ -12,6 +18,71 @@ namespace
 {
     namespace fs = std::filesystem;
     using namespace renegade::bridge;
+
+    // Use the same sample-aligned MP4 decode path for Annex B streams. The
+    // pinned raw reader can lose byte alignment after parsing a slice header.
+    bool WrapAnnexBForPlayback(const std::vector<uint8_t>& input,std::vector<uint8_t>& mp4)
+    {
+        constexpr unsigned char prefix[]={0,0,1};
+        auto start=std::search(input.begin(),input.end(),std::begin(prefix),std::end(prefix));
+        auto write=[](int64_t offset,const void* bytes,size_t count,void* token)->int {
+            auto& out=*static_cast<std::vector<uint8_t>*>(token);
+            if (offset<0 || static_cast<uint64_t>(offset)>out.max_size()-count) return 1;
+            const auto end=static_cast<size_t>(offset)+count;
+            if (out.size()<end) out.resize(end);
+            std::memcpy(out.data()+offset,bytes,count);
+            return 0;
+        };
+        auto* mux=MP4E_open(0,0,&mp4,write);
+        if (!mux) return false;
+        int track=-1;
+        bool success=true,hasPicture=false,hasPps=false;
+        std::vector<uint8_t> sample;
+        while (success && start!=input.end())
+        {
+            const auto nal=start+sizeof(prefix);
+            start=std::search(nal,input.end(),std::begin(prefix),std::end(prefix));
+            auto end=start;
+            while (end!=nal && *(end-1)==0) --end;
+            const auto length=end-nal;
+            if (length<2) continue;
+            if (length>INT_MAX-4) {success=false;break;}
+            const auto type=*nal&31;
+            if (type==7 && track<0)
+            {
+                h264::Bitstream bits{};
+                bits.init(&*(nal+1),length-1);
+                h264::SPS sps{};
+                h264::read_sps(&sps,&bits);
+                MP4E_track_t description{};
+                description.track_media_kind=e_video;
+                description.object_type_indication=MP4_OBJECT_TYPE_AVC;
+                description.time_scale=60000;
+                description.default_duration=1000;
+                description.u.v.width=(sps.pic_width_in_mbs_minus1+1)*16-2*(sps.frame_crop_left_offset+sps.frame_crop_right_offset);
+                description.u.v.height=(2-sps.frame_mbs_only_flag)*(sps.pic_height_in_map_units_minus1+1)*16-2*(sps.frame_crop_top_offset+sps.frame_crop_bottom_offset);
+                track=MP4E_add_track(mux,&description);
+                success=track>=0 && MP4E_set_sps(mux,track,&*nal,static_cast<int>(length))==0;
+            }
+            else if (type==8 && track>=0 && !hasPps)
+            {
+                hasPps=MP4E_set_pps(mux,track,&*nal,static_cast<int>(length))==0;
+                success=hasPps;
+            }
+            else if (type==1 || type==5)
+            {
+                if (!hasPps || !(*(nal+1)&0x80)) {success=false;break;}
+                const auto n=static_cast<uint32_t>(length);
+                sample={uint8_t(n>>24),uint8_t(n>>16),uint8_t(n>>8),uint8_t(n)};
+                sample.insert(sample.end(),nal,end);
+                success=MP4E_put_sample(mux,track,sample.data(),static_cast<int>(sample.size()),1000,
+                    type==5 ? MP4E_SAMPLE_RANDOM_ACCESS : MP4E_SAMPLE_DEFAULT)==0;
+                hasPicture=true;
+            }
+        }
+        const int finalStatus=MP4E_close(mux);
+        return success && hasPicture && finalStatus==0;
+    }
 
     bool IsWithin(const fs::path& child, const fs::path& parent)
     {
@@ -93,6 +164,26 @@ namespace
 
 namespace renegade::bridge
 {
+    bool ValidateScreenVideoFile(const std::string& path,std::string& error)
+    {
+        std::error_code ec;
+        const auto bytes=fs::file_size(fs::u8path(path),ec);
+        if (ec || !bytes || bytes>CreatorVideoWorkflowService::MaximumCreatorVideoBytes)
+        {
+            error="Choose an available, non-empty video of 4 GiB or less.";
+            return false;
+        }
+        PreparedVideoAsset clip;
+        clip.sourceFormat=DetectResourceSourceFormat(path);
+        clip.logicalResourceName=path;
+        if (!wi::helper::FileRead(path,clip.payload))
+        {
+            error="Could not read the selected video.";
+            return false;
+        }
+        return LoadPreparedVideoAsset(clip,error).IsValid();
+    }
+
     bool PrepareVideoAsset(
         const std::string& projectRoot,
         const StableId& projectId,
@@ -173,6 +264,15 @@ namespace renegade::bridge
             error);
     }
 
+    bool PreparePackagedVideo(const std::string& root,const StableId& project,
+        const StableId& id,PreparedVideoAsset& prepared,std::string& error)
+    {
+        PackagedResourceAsset asset;
+        if (!PreparePackagedResourceAsset(root,project,id,asset,error) || asset.resourceClass!=ResourceClass::Video) return false;
+        return PrepareFromPayload(project,id,asset.packagedAssetPath,asset.sourceFormat,
+            asset.payloadHash,std::move(asset.payload),prepared,error);
+    }
+
     wi::Resource LoadPreparedVideoAsset(
         const PreparedVideoAsset& prepared,
         std::string& error)
@@ -184,13 +284,20 @@ namespace renegade::bridge
             return {};
         }
 
+        std::vector<uint8_t> wrapped;
+        const bool raw=prepared.sourceFormat==ResourceSourceFormat::H264;
+        if (raw && !WrapAnnexBForPlayback(prepared.payload,wrapped))
+        {
+            error="Could not read the raw H.264 clip. Export single-slice H.264 or H.264 MP4.";
+            return {};
+        }
+        const auto& payload=raw ? wrapped : prepared.payload;
         wi::Resource resource = wi::resourcemanager::Load(
-            prepared.logicalResourceName,
-            wi::resourcemanager::Flags::NONE,
-            prepared.payload.data(), prepared.payload.size());
+            raw ? prepared.logicalResourceName+".mp4" : prepared.logicalResourceName,
+            wi::resourcemanager::Flags::NONE,payload.data(),payload.size());
         if (!resource.IsValid() || !resource.GetVideo().IsValid())
         {
-            error = "Wicked could not decode the governed video payload.";
+            error = "Wicked could not play this video. Choose H.264 (AVC) in MP4 or a raw H.264 file.";
             return {};
         }
         error.clear();

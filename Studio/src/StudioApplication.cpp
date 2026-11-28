@@ -3389,6 +3389,7 @@ namespace renegade::studio
                 RequestDiagnosticAction(EditorAction::CreateLight);
                 break;
             case RenegadeStudioChrome::Action::CreateZone:
+            case RenegadeStudioChrome::Action::CreateLocationZone:
                 if (session_ && !testLevelRuntime_.IsActive() && !projectHubVisible_)
                 {
                     SetEnvironmentWorkspaceActive(false);
@@ -3399,6 +3400,7 @@ namespace renegade::studio
                     DisableWd01VegetationBrush();
                     DisableTerrainPropBrush();
                     studioChrome_.PrepareViewportPlacement();
+                    zonePlacementPreset_=action==RenegadeStudioChrome::Action::CreateLocationZone?bridge::zones::Behaviour::Location:bridge::zones::Behaviour::Trigger;
                     zonePlacing_ = true;
                     studioChrome_.SetStatusText("ZONE // CLICK GROUND TO PLACE // RIGHT CLICK TO CANCEL");
                 }

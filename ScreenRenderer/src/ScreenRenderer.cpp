@@ -1,9 +1,21 @@
+#include <set>
+#include "renegade/bridge/WorldNavigationService.h"
+#include <fstream>
+#include <random>
+#include "ScreenCameraFeed.h"
+#include "ScreenVideoAudio.h"
+#include "renegade/bridge/VideoAssetService.h"
+#include <optional>
+#include "renegade/bridge/ScreenClickSound.h"
 #include "renegade/screen/ScreenRenderer.h"
 #include "renegade/screen/ScreenTextLayout.h"
 #include "renegade/bridge/ScreenThemeResolver.h"
 
 #include <WickedEngine.h>
 
+#include "ScreenVideoMatteCS.generated.h"
+#include "ScreenLiquidCS.generated.h"
+#include "ScreenMinimapCS.generated.h"
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -140,12 +152,113 @@ namespace
     public:
         renegade::bridge::ScreenWidget authored;
         std::unordered_map<ScreenInteractionState, wi::Resource> resources;
+        const wi::graphics::Texture* cameraTexture=nullptr;
+        wi::Resource videoResource;
+        wi::video::VideoInstance videoInstance;
+        std::unique_ptr<renegade::screen::ScreenVideoAudio> videoAudio;
+        wi::graphics::Texture videoFrame;
+        wi::graphics::Texture matteFrame;
+        renegade::bridge::VideoTransparency transparency=renegade::bridge::VideoTransparency::Opaque;
+        int matteDisplayOrder=-1;
+        bool hideVideoForCameraOverride=false;
+        struct HintDeck
+        {
+            std::vector<std::string> original, shuffled;
+            size_t index=0;
+            std::string last;
+            std::string Next()
+            {
+                if (index==shuffled.size())
+                {
+                    shuffled=original;
+                    static thread_local std::mt19937 rng{std::random_device{}()};
+                    std::shuffle(shuffled.begin(),shuffled.end(),rng);
+                    if (shuffled.size()>1 && shuffled.front()==last) std::swap(shuffled.front(),shuffled.back());
+                    index=0;
+                }
+                return last=shuffled[index++];
+            }
+        };
+        std::shared_ptr<HintDeck> hintDeck;
+        std::string displayedHint;
+        std::string videoDetails;
+        float hintSeconds=0;
+        std::vector<wi::Resource> carouselImages;
+        std::vector<size_t> carouselOrder;
+        size_t carouselPosition=0;
+        float carouselSeconds=0;
+        std::mt19937 carouselRandom{std::random_device{}()};
+        bool emptyCarouselCaption=false;
+        std::optional<std::string> carouselCaptionText;
+
+        #include "ScreenNavigationDrawing.inl"
+        #include "ScreenMinimapDrawing.inl"
+        #include "ScreenHurtDrawing.inl"
+        std::optional<renegade::bridge::LocationAnnouncementFrame> locationFrame;
+        bool locationReducedMotion=false;
+
+        wi::Resource liquidSound;
+        wi::audio::SoundInstance liquidVoice;
+        std::string liquidSoundPath;
+        bool PlayLiquidSound(const std::string& root,const std::string& clip,std::string& error)
+        {
+            std::string path;if(!renegade::bridge::ResolveScreenResourcePath(root,clip,path,error))return false;
+            if(path!=liquidSoundPath||!liquidSound.IsValid())
+            {
+                if(!renegade::bridge::ValidateAudioAssetForWicked(path,error))return false;
+                auto resource=wi::resourcemanager::Load(path);
+                if(!resource.IsValid()||!resource.GetSound().IsValid()){error="Cannot load liquid sound.";return false;}
+                liquidSound=std::move(resource);liquidSoundPath=path;
+            }
+            wi::audio::SoundInstance voice;voice.type=wi::audio::SUBMIX_TYPE_SOUNDEFFECT;voice.SetLooped(false);
+            if(!wi::audio::CreateSoundInstance(&liquidSound.GetSound(),&voice)){error="Cannot play liquid sound.";return false;}
+            liquidVoice=std::move(voice);wi::audio::Play(&liquidVoice);return true;
+        }
+        wi::Resource liquidMask;
+        wi::graphics::Texture liquidFrame;
+        float liquidSeconds=0,liquidLastFill=-1,soundCooldown=0;
+        int liquidTick=-1;
+        bool fillSampleReceived=false,liquidReduced=false;
+        void UpdateLiquid(wi::graphics::Shader& shader,float dt,bool reducedMotion)
+        {
+            if(!authored.liquid||!IsVisible()||!liquidMask.IsValid())return;
+            using namespace wi::graphics;
+            const auto& liquid=*authored.liquid;
+            soundCooldown=std::max(0.f,soundCooldown-std::max(0.f,dt));
+            if(liquid.animated&&!reducedMotion)liquidSeconds=std::fmod(liquidSeconds+std::max(0.f,dt),4.f);
+            const int tick=int(liquidSeconds*24);
+            if(liquidTick==tick&&liquidLastFill==authored.fill&&liquidReduced==reducedMotion&&liquidFrame.IsValid())return;
+            auto* device=GetDevice();
+            if(!shader.IsValid()&&!device->CreateShader(ShaderStage::CS,kScreenLiquid,sizeof(kScreenLiquid),&shader))return;
+            const auto& mask=liquidMask.GetTexture();
+            if(!liquidFrame.IsValid())
+            {
+                TextureDesc desc;desc.width=mask.GetDesc().width;desc.height=mask.GetDesc().height;
+                desc.format=Format::R8G8B8A8_UNORM;desc.bind_flags=BindFlag::SHADER_RESOURCE|BindFlag::UNORDERED_ACCESS;
+                if(!device->CreateTexture(&desc,nullptr,&liquidFrame))return;
+            }
+            const float settings[]={liquid.left,liquid.right,liquid.top,liquid.bottom,authored.fill,
+                tick/24.f,reducedMotion||!liquid.animated?0:liquid.wavePixels,
+                float((reducedMotion||!liquid.animated?0:liquid.bubbles)+64*static_cast<int>(authored.fillDirection))};
+            auto cmd=device->BeginCommandList();
+            auto barrier=GPUBarrier::Image(&liquidFrame,ResourceState::SHADER_RESOURCE,ResourceState::UNORDERED_ACCESS);
+            device->Barrier(&barrier,1,cmd);device->BindComputeShader(&shader,cmd);
+            device->BindResource(&mask,0,cmd);device->BindUAV(&liquidFrame,0,cmd);
+            device->PushConstants(settings,sizeof(settings),cmd);
+            device->Dispatch((liquidFrame.GetDesc().width+7)/8,(liquidFrame.GetDesc().height+7)/8,1,cmd);
+            barrier=GPUBarrier::Image(&liquidFrame,ResourceState::UNORDERED_ACCESS,ResourceState::SHADER_RESOURCE);
+            device->Barrier(&barrier,1,cmd);liquidTick=tick;liquidLastFill=authored.fill;liquidReduced=reducedMotion;
+        }
         wi::Resource progressFrameImage;
         wi::Resource progressFillImage;
         int fontStyle = 0;
+        int locationFontStyle = -1;
+        std::string locationFontResource;
         float scaleX = 1.0f;
         float scaleY = 1.0f;
         bool keyboardFocused = false;
+        std::optional<ScreenColor> previewColour;
+        ScreenInteractionState previewState = ScreenInteractionState::Normal;
         renegade::bridge::ScreenAccessibilitySettings accessibility;
         bool hasClip = false;
         renegade::bridge::ScreenRect clip;
@@ -162,7 +275,7 @@ namespace
             const renegade::bridge::ScreenRect& content,
             renegade::bridge::ScreenHorizontalAlignment horizontal,
             renegade::bridge::ScreenVerticalAlignment vertical,
-            wi::graphics::CommandList cmd) const
+            wi::graphics::CommandList cmd,bool measureOnly=false) const
         {
             params.h_wrap=-1;params.h_align=wi::font::WIFALIGN_LEFT;
             params.v_align=wi::font::WIFALIGN_TOP;
@@ -188,7 +301,7 @@ namespace
                     wrappedLines[i].width,height,float(i)*advance,horizontal,vertical);
                 if(origin.y>=content.y+content.height)break;
                 params.posX=origin.x;params.posY=origin.y;
-                wi::font::Draw(wrappedLines[i].text,params,cmd);
+                if(!measureOnly)wi::font::Draw(wrappedLines[i].text,params,cmd);
             }
         }
         void Update(const wi::Canvas& canvas,float dt) override
@@ -280,6 +393,7 @@ namespace
             if (renegade::bridge::IsScreenInteractive(authored.kind) &&
                 !authored.enabled)
                 return ScreenInteractionState::Disabled;
+            if (previewState != ScreenInteractionState::Normal) return previewState;
             if (GetState() == wi::gui::ACTIVE)
                 return ScreenInteractionState::Pressed;
             if (GetState() == wi::gui::FOCUS)
@@ -293,7 +407,9 @@ namespace
             const wi::graphics::CommandList cmd) const override
         {
             wi::gui::Widget::Render(canvas, cmd);
-            if (!IsVisible()) return;
+            if (!IsVisible() || emptyCarouselCaption) return;
+            const auto locationSample=locationFrame?renegade::bridge::SampleLocationText(*locationFrame,locationReducedMotion):renegade::bridge::LocationTextSample{};
+            if(locationFrame&&!locationSample.visible)return;
 
             auto clipped = scissorRect;
             if (hasClip)
@@ -305,7 +421,10 @@ namespace
             }
             ApplyScissor(canvas, clipped, cmd);
             const auto interaction = Interaction();
-            const auto style = renegade::bridge::ResolveAccessibleScreenStyle(authored.style,authored.kind,accessibility);
+            auto style = renegade::bridge::ResolveAccessibleScreenStyle(authored.style,authored.kind,accessibility);
+            if(locationFrame)style.opacity*=locationSample.opacity;
+            if(authored.hurt){DrawHurtFeedback(canvas,cmd,style);return;}
+            if(authored.navigation&&authored.navigation->minimap){DrawMinimap(canvas,cmd,clipped,style);return;}
             const auto& visual = SelectVisual(style, interaction);
             const float geometryScale = std::min(scaleX, scaleY);
             const float border = std::clamp(
@@ -325,23 +444,47 @@ namespace
             const wi::Resource* image = (accessibility.contrast!=0 &&
                 authored.kind!=renegade::bridge::ScreenWidgetKind::Image) || resource == resources.end() ?
                 nullptr : &resource->second;
-            const ScreenColor& surfaceColor = image != nullptr && image->IsValid() ?
-                visual.imageTint : visual.background;
+            const auto surfaceColor = previewColour.value_or(image != nullptr && image->IsValid() ?
+                visual.imageTint : visual.background);
             renegade::bridge::ScreenRect imageRect{
                 translation.x+border,translation.y+border,scale.x-border*2,scale.y-border*2};
             if(image&&image->IsValid()&&authored.kind==renegade::bridge::ScreenWidgetKind::Image) {
                 const auto& desc=image->GetTexture().GetDesc();
                 imageRect=renegade::bridge::FitScreenImage(imageRect,float(desc.width),float(desc.height),authored.imageFit);
             }
-            DrawSurface(image,imageRect.x,imageRect.y,imageRect.width,imageRect.height,
+            const auto* mediaTexture = !hideVideoForCameraOverride && videoFrame.IsValid() ? &videoFrame : cameraTexture;
+            if(mediaTexture && mediaTexture->IsValid())
+            {
+                const auto rect=renegade::bridge::FitScreenImage(
+                    {translation.x+border,translation.y+border,scale.x-border*2,scale.y-border*2},
+                    float(mediaTexture->GetDesc().width),float(mediaTexture->GetDesc().height),authored.imageFit);
+                wi::image::Params params(rect.x,rect.y,rect.width,rect.height,ToWickedColor(visual.imageTint,style.opacity));
+                ApplyRounding(params,std::max(0.f,radius-border));
+                if (authored.video && authored.video->additive)
+                    params.blendFlag=wi::enums::BLENDMODE_ADDITIVE;
+                wi::image::Draw(mediaTexture,params,cmd);
+            }
+            else if (!authored.video || hideVideoForCameraOverride || transparency==renegade::bridge::VideoTransparency::Opaque) DrawSurface(image,imageRect.x,imageRect.y,imageRect.width,imageRect.height,
                 std::max(0.0f,radius-border),ToWickedColor(surfaceColor,style.opacity),cmd);
+
+            DrawNavigation(canvas,cmd,clipped,style);
 
             if (authored.kind == renegade::bridge::ScreenWidgetKind::Progress)
             {
                 const auto fillRect = renegade::bridge::ResolveScreenFillRect(
                     {translation.x, translation.y, scale.x, scale.y},
                     authored.fill, authored.fillDirection, border);
-                if (progressFillImage.IsValid())
+                if(authored.liquid)
+                {
+                    if(liquidFrame.IsValid())
+                    {
+                        wi::image::Params params(translation.x,translation.y,scale.x,scale.y,
+                            ToWickedColor(visual.imageTint,style.opacity));
+                        params.blendFlag=wi::enums::BLENDMODE_ALPHA;
+                        wi::image::Draw(&liquidFrame,params,cmd);
+                    }
+                }
+                else if (progressFillImage.IsValid())
                 {
                     // Clip a full-width textured bar instead of shrinking the artwork.
                     auto fillClip = clipped;
@@ -388,7 +531,7 @@ namespace
                 const auto& text = style.text;
                 params.size = std::max(1, static_cast<int>(std::round(
                     text.fontSize * geometryScale)));
-                params.style = fontStyle;
+                params.style = locationFontStyle>=0?locationFontStyle:fontStyle;
                 params.spacingX = text.characterSpacing * geometryScale;
                 params.spacingY = text.lineSpacing * geometryScale;
                 params.softness = text.softness;
@@ -416,7 +559,12 @@ namespace
                     (text.verticalAlignment == ScreenVerticalAlignment::Bottom ?
                         top + height : top);
                 params.h_wrap = text.wrap ? width : -1.0f;
-                std::string display=authored.text;
+                std::string display=carouselCaptionText ? *carouselCaptionText :
+                    (displayedHint.empty() ? authored.text : displayedHint);
+                if(locationFrame){
+                    display=locationFrame->text;
+                    params.posX+=locationSample.x*geometryScale;params.posY+=locationSample.y*geometryScale;
+                }
                 if(renegade::bridge::IsScreenValueControl(authored.kind))
                 {
                     using namespace renegade::bridge;
@@ -434,12 +582,58 @@ namespace
                 textClip.right=std::min(textClip.right,static_cast<int32_t>(std::floor(left+width)));
                 textClip.bottom=std::min(textClip.bottom,static_cast<int32_t>(std::floor(top+height)));
                 ApplyScissor(canvas,textClip,cmd);
+                const auto drawText=[&](wi::font::Params pass,float dx,float dy) {
+                    pass.posX+=dx;pass.posY+=dy;
+                    if(text.wrap&&authored.kind!=renegade::bridge::ScreenWidgetKind::TextInput)
+                        DrawWrappedText(display,pass,{left+dx,top+dy,width,height},
+                            text.horizontalAlignment,text.verticalAlignment,cmd);
+                    else wi::font::Draw(display,pass,cmd);
+                };
+                const float offsetX=locationFrame?locationSample.x*geometryScale:0.f;
+                const float offsetY=locationFrame?locationSample.y*geometryScale:0.f;
+                // params already contains the unwrapped offset. Give both paths one origin.
+                params.posX-=offsetX;params.posY-=offsetY;
+                const auto glitch=locationFrame?renegade::bridge::SampleLocationGlitch(*locationFrame,locationReducedMotion):
+                    renegade::bridge::LocationGlitchSample{};
                 if(authored.kind==renegade::bridge::ScreenWidgetKind::TextInput&&input.GetState()==wi::gui::ACTIVE)
                     const_cast<ScreenSurface*>(this)->input.RenderEditor(canvas,cmd,params,textClip);
-                else if(text.wrap&&authored.kind!=renegade::bridge::ScreenWidgetKind::TextInput)
-                    DrawWrappedText(display,params,{left,top,width,height},
-                        text.horizontalAlignment,text.verticalAlignment,cmd);
-                else wi::font::Draw(display, params, cmd);
+                else if(!glitch.active)drawText(params,offsetX,offsetY);
+                else {
+                    // Prime the same wrapped layout used to draw the label. No alternate font layout.
+                    if(text.wrap)DrawWrappedText(display,params,{left,top,width,height},
+                        text.horizontalAlignment,text.verticalAlignment,cmd,true);
+                    const float blockHeight=text.wrap?
+                        std::max(1.f,float(params.size)+params.spacingY)*float(wrappedLines.size()):
+                        wi::font::TextSize(display,params).y;
+                    const float blockTop=text.verticalAlignment==ScreenVerticalAlignment::Center?top+(height-blockHeight)*.5f:
+                        text.verticalAlignment==ScreenVerticalAlignment::Bottom?top+height-blockHeight:top;
+                    struct Cut {int top,bottom;float shift;};
+                    std::array<Cut,2> cuts;
+                    for(size_t i=0;i<cuts.size();++i){
+                        const auto& band=glitch.bands[i];
+                        cuts[i]={std::clamp(int(std::floor(blockTop+band.start*blockHeight)),textClip.top,textClip.bottom),
+                            std::clamp(int(std::ceil(blockTop+(band.start+band.height)*blockHeight)),textClip.top,textClip.bottom),
+                            band.offsetX*geometryScale};
+                    }
+                    auto segment=textClip;
+                    for(const auto& cut:cuts){
+                        segment.bottom=cut.top;
+                        if(segment.bottom>segment.top){ApplyScissor(canvas,segment,cmd);drawText(params,0,0);}
+                        segment.top=cut.bottom;
+                    }
+                    segment.bottom=textClip.bottom;
+                    if(segment.bottom>segment.top){ApplyScissor(canvas,segment,cmd);drawText(params,0,0);}
+                    for(const auto& cut:cuts)if(cut.bottom>cut.top){
+                        auto bandClip=textClip;bandClip.top=cut.top;bandClip.bottom=cut.bottom;ApplyScissor(canvas,bandClip,cmd);
+                        auto ghost=params;ghost.shadowColor=wi::Color(0,0,0,0);
+                        const auto alpha=uint8_t(float(params.color.getA())*.65f);
+                        ghost.color=wi::Color(255,65,125,alpha);
+                        drawText(ghost,cut.shift-glitch.separation*geometryScale,0);
+                        ghost.color=wi::Color(55,220,255,alpha);
+                        drawText(ghost,cut.shift+glitch.separation*geometryScale,0);
+                        drawText(params,cut.shift,0);
+                    }
+                }
                 ApplyScissor(canvas,clipped,cmd);
                 if(!controlDiagnostic.empty())
                 {
@@ -520,14 +714,22 @@ namespace renegade::screen
             ScreenRenderItem item;
             item.widgetId = widget.id;
             item.kind = widget.kind;
+            // Hurt effects cover the gameplay viewport, including the bands
+            // left by a fitted HUD design. Keep authored partial rectangles
+            // editable as proportional viewport regions; ordinary HUD widgets
+            // retain their selected Fit/Fill/Stretch transform.
+            const float scaleX=widget.hurt?outputWidth/document.designWidth:canvas.scaleX;
+            const float scaleY=widget.hurt?outputHeight/document.designHeight:canvas.scaleY;
+            const float offsetX=widget.hurt?0:canvas.offsetX;
+            const float offsetY=widget.hurt?0:canvas.offsetY;
             item.logicalRect = {
-                canvas.offsetX + designRect.x * canvas.scaleX,
-                canvas.offsetY + designRect.y * canvas.scaleY,
-                designRect.width * canvas.scaleX,
-                designRect.height * canvas.scaleY,
+                offsetX + designRect.x * scaleX,
+                offsetY + designRect.y * scaleY,
+                designRect.width * scaleX,
+                designRect.height * scaleY,
             };
-            item.scaleX = canvas.scaleX;
-            item.scaleY = canvas.scaleY;
+            item.scaleX = scaleX;
+            item.scaleY = scaleY;
             item.interaction = interaction;
             item.visual = SelectVisual(widget.style, interaction);
             item.borderColor = widget.style.borderColor;
@@ -773,10 +975,22 @@ namespace renegade::screen
         ControlSink controlSink;
         DragSink dragSink;
         ScreenInstanceRoot root;
+        wi::graphics::Shader videoMatteShader,liquidShader,minimapShader;
+        std::unique_ptr<ScreenCameraFeed> feed;
+        ScreenSurface* cameraSurface=nullptr;
+        bool feedAttempted=false;
+        std::uint64_t cameraRevision=0;
         bool attached=false;
         wi::gui::Window* embeddedParent=nullptr;
         std::vector<std::unique_ptr<ScreenSurface>> surfaces;
         std::unordered_map<bridge::StableId, ScreenSurface*> byId;
+        std::map<bridge::StableId,bridge::ScreenWidget> navigationOriginal;
+        std::map<bridge::StableId,bool> navigationVisibility,navigationBindingVisibility;
+        std::set<bridge::StableId> navigationDynamic,hurtDynamic;
+        std::uint64_t hurtRevision=UINT64_MAX;
+        std::set<std::string> navigationGlobalArtwork;
+        std::uint64_t navigationRevision=UINT64_MAX;
+
         std::unordered_map<bridge::StableId, bridge::ScreenRect> logicalRects;
         struct ScrollThumb {bridge::StableId trackId;float position=0;float fraction=1;};
         std::unordered_map<bridge::StableId,ScrollThumb> scrollThumbs;
@@ -799,6 +1013,91 @@ namespace renegade::screen
     ScreenRenderer::~ScreenRenderer() = default;
     ScreenRenderer::ScreenRenderer(ScreenRenderer&&) noexcept = default;
     ScreenRenderer& ScreenRenderer::operator=(ScreenRenderer&&) noexcept = default;
+
+    static void ConfigureScreenMedia(ScreenSurface& surface,const bridge::ScreenWidget& widget,
+        const std::string& projectRoot,const bridge::StableId& projectId)
+    {
+        surface.videoAudio.reset();
+        surface.videoFrame={};
+        surface.matteFrame={};
+        surface.matteDisplayOrder=-1;
+        surface.transparency=bridge::VideoTransparency::Opaque;
+        surface.videoInstance={};
+        surface.videoResource={};
+        surface.hintDeck.reset();
+        surface.displayedHint.clear();
+        surface.hintSeconds=0;
+        surface.videoDetails.clear();
+            if (!widget.hintListPath.empty())
+            {
+                std::string file,diagnostic;
+                if (bridge::ResolveScreenResourcePath(projectRoot,widget.hintListPath,file,diagnostic))
+                {
+                    std::ifstream input(std::filesystem::u8path(file));
+                    std::vector<std::string> hints;
+                    for (std::string line;std::getline(input,line);)
+                    {
+                        if (!line.empty() && line.back()=='\r') line.pop_back();
+                        if (line.find_first_not_of(" \t")!=std::string::npos) hints.push_back(line);
+                    }
+                    if (!hints.empty())
+                    {
+                        static std::map<std::string,std::shared_ptr<ScreenSurface::HintDeck>> decks;
+                        auto& deck=decks[file];
+                        if (!deck || deck->original!=hints)
+                        {
+                            deck=std::make_shared<ScreenSurface::HintDeck>();
+                            deck->original=std::move(hints);
+                        }
+                        surface.hintDeck=deck;
+                        surface.displayedHint=deck->Next();
+                    }
+                }
+            }
+            if (widget.video && !widget.video->assetId.empty())
+            {
+                bridge::PreparedVideoAsset prepared;
+                std::string diagnostic;
+                if (bridge::PrepareVideoAsset(projectRoot,projectId,widget.video->assetId,prepared,diagnostic) ||
+                    bridge::PreparePackagedVideo(projectRoot,projectId,widget.video->assetId,prepared,diagnostic))
+                    surface.videoResource=bridge::LoadPreparedVideoAsset(prepared,diagnostic);
+                if (surface.videoResource.IsValid() && wi::video::CreateVideoInstance(
+                    &surface.videoResource.GetVideo(), &surface.videoInstance))
+                {
+                    surface.transparency=widget.video->transparency;
+                    if (surface.transparency==bridge::VideoTransparency::Auto)
+                    {
+                        // Content identity also recognises previously imported stock clips.
+                        if (prepared.payloadHash=="fnv1a64:b01c7fbba36f62e0") surface.transparency=bridge::VideoTransparency::RemoveBlack;
+                        else if (prepared.payloadHash=="fnv1a64:d4a973200ee74894") surface.transparency=bridge::VideoTransparency::SoftSmoke;
+                        else surface.transparency=bridge::VideoTransparency::Opaque;
+                    }
+                    const auto& video=surface.videoResource.GetVideo();
+                    surface.videoDetails=std::to_string(video.width)+" x "+std::to_string(video.height)+" / "+
+                        std::to_string(static_cast<int>(std::round(video.average_frames_per_second)))+" fps / "+
+                        std::to_string((prepared.payload.size()+1023)/1024)+" KiB";
+                    surface.videoInstance.flags |= wi::video::VideoInstance::Flags::Playing;
+                    if (!widget.video->mute && prepared.sourceFormat==bridge::ResourceSourceFormat::Mp4)
+                    {
+                        surface.videoAudio=std::make_unique<ScreenVideoAudio>();
+                        if (!surface.videoAudio->Open(prepared.payload)) surface.videoAudio.reset();
+                    }
+                    if (widget.video->loop) surface.videoInstance.flags |= wi::video::VideoInstance::Flags::Looped;
+                }
+                else wi::backlog::post("Screen video unavailable: "+diagnostic,wi::backlog::LogLevel::Warning);
+            }
+    }
+
+    void ScreenRenderer::SetWidgetMedia(const bridge::StableId& id,
+        const std::optional<bridge::ScreenVideoPanel>& video,const std::string& hints)
+    {
+        const auto it=impl_->byId.find(id);
+        if (it==impl_->byId.end()) return;
+        auto& surface=*it->second;
+        surface.authored.video=video;
+        surface.authored.hintListPath=hints;
+        ConfigureScreenMedia(surface,surface.authored,impl_->projectRoot,impl_->document.envelope.projectId);
+    }
 
     bool ScreenRenderer::Load(
         const bridge::ScreenDocument& authoredDocument,
@@ -864,6 +1163,9 @@ namespace renegade::screen
                 impl_->inputEnabled &&
                 bridge::IsScreenInteractive(widget.kind) && widget.enabled);
             surface->SetText(widget.text);
+            if(widget.hurt&&!surface->LoadHurtArtwork(projectRoot,error)){Reset(renderPath);return false;}
+            if(widget.navigation){impl_->navigationOriginal[widget.id]=widget;if(!surface->LoadNavigationArtwork(projectRoot,error)){Reset(renderPath);return false;}}
+            ConfigureScreenMedia(*surface,widget,projectRoot,document.envelope.projectId);
             surface->SetShadowRadius(0.0f);
             if (widget.kind == bridge::ScreenWidgetKind::Progress)
             {
@@ -872,6 +1174,20 @@ namespace renegade::screen
                 { Reset(renderPath); return false; }
             }
 
+            if(widget.liquid&&!loadResource(widget.liquid->mask,surface->liquidMask))
+            {Reset(renderPath);return false;}
+            if(widget.carousel)
+            {
+                for(const auto& slide:widget.carousel->entries)
+                {
+                    wi::Resource image;
+                    if(!loadResource(slide.image,image)){Reset(renderPath);return false;}
+                    surface->carouselOrder.push_back(surface->carouselImages.size());
+                    surface->carouselImages.push_back(std::move(image));
+                }
+                if(widget.carousel->shuffle)
+                    std::shuffle(surface->carouselOrder.begin(),surface->carouselOrder.end(),surface->carouselRandom);
+            }
             std::string primary = widget.style.normal.imageResourcePath;
             if (primary.empty() && widget.kind == bridge::ScreenWidgetKind::Image)
                 primary = widget.resourcePath;
@@ -894,7 +1210,7 @@ namespace renegade::screen
                 surface->resources.emplace(interaction, std::move(resource));
             }
 
-            if (widget.kind == bridge::ScreenWidgetKind::Text ||
+            if (widget.navigation || widget.kind == bridge::ScreenWidgetKind::Text ||
                 bridge::IsScreenInteractive(widget.kind))
             {
                 if (widget.style.text.fontResource == bridge::BuiltinScreenFont)
@@ -990,6 +1306,7 @@ namespace renegade::screen
 
             auto* raw = surface.get();
             impl_->root.surfaces.push_back(raw);
+            if(widget.cameraSource && widget.visible) impl_->cameraSurface=raw;
             impl_->byId.emplace(widget.id, raw);
             impl_->surfaces.push_back(std::move(surface));
         }
@@ -1000,6 +1317,7 @@ namespace renegade::screen
         impl_->root.priority_change=false;
         impl_->loaded = true;
         AttachPresentation(renderPath);
+        RefreshCarouselPresentation();
         ApplyLayout(renderPath);
         error.clear();
         return true;
@@ -1178,7 +1496,7 @@ namespace renegade::screen
         if(impl_->root.IsVisible()==visible)return;
         impl_->root.SetVisible(visible);
         if(!visible)for(auto* surface:impl_->root.surfaces)
-        {surface->CancelInteraction();}
+        {surface->CancelInteraction(); if (surface->videoAudio) surface->videoAudio->Update(0,false);}
     }
     void ScreenRenderer::AttachPresentation(wi::RenderPath2D& renderPath)
     {
@@ -1206,6 +1524,26 @@ namespace renegade::screen
         return impl_->inputEnabled;
     }
 
+    void ScreenRenderer::PlayButtonClick(const bridge::StableId& id)
+    {
+        const auto found=impl_->byId.find(id);
+        if(found==impl_->byId.end() || found->second->authored.kind!=bridge::ScreenWidgetKind::Button) return;
+        const auto& sounds=bridge::ProjectClickSounds(impl_->projectRoot);
+        std::string error;
+        if(!bridge::PlayScreenClick(impl_->projectRoot,sounds.Resolve({impl_->document.envelope.documentId,id}),error))
+            wi::backlog::post("UI click sound: "+error,wi::backlog::LogLevel::Warning);
+    }
+
+    void ScreenRenderer::PreviewWidgetAppearance(const bridge::StableId& widgetId, ScreenInteractionState state, const bridge::ScreenColor* colour)
+    {
+        if (const auto found = impl_->byId.find(widgetId); found != impl_->byId.end())
+        {
+            found->second->previewState = state;
+            if (colour) found->second->previewColour = *colour;
+            else found->second->previewColour.reset();
+        }
+    }
+
     void ScreenRenderer::SetFocusedWidget(const bridge::StableId& widgetId)
     {
         for (const auto& [id, surface] : impl_->byId)
@@ -1219,17 +1557,21 @@ namespace renegade::screen
     {
         const auto found = impl_->byId.find(widgetId);
         if (found == impl_->byId.end()) return;
-        if(found->second->authored.visible!=visible ||
+        if(found->second->authored.navigation)impl_->navigationBindingVisibility[widgetId]=visible;
+        const auto navVisible=impl_->navigationVisibility.find(widgetId);
+        const bool effectiveVisible=visible&&(navVisible==impl_->navigationVisibility.end()||navVisible->second);
+
+        if(found->second->authored.visible!=effectiveVisible ||
            found->second->authored.enabled!=enabled)impl_->layoutDirty=true;
         // This document is the renderer instance's transient layout source.
         // Keep it in sync, or ApplyLayout re-disables initially-disabled UP
         // buttons every frame and destroys their release-click state.
         for(auto& widget:impl_->document.widgets)if(widget.id==widgetId) {
-            widget.visible=visible;widget.enabled=enabled;break;
+            widget.visible=effectiveVisible;widget.enabled=enabled;break;
         }
-        found->second->authored.visible = visible;
+        found->second->authored.visible = effectiveVisible;
         found->second->authored.enabled = enabled;
-        found->second->SetVisible(visible);
+        found->second->SetVisible(effectiveVisible);
         found->second->SetEnabled(
             impl_->inputEnabled &&
             bridge::IsScreenInteractive(found->second->authored.kind) &&
@@ -1254,10 +1596,58 @@ namespace renegade::screen
         if (found == impl_->byId.end() ||
             found->second->authored.kind != bridge::ScreenWidgetKind::Progress) return;
         const float value = std::clamp(fill, 0.0f, 1.0f);
+        auto& surface=*found->second;
+        if(surface.authored.liquid&&surface.fillSampleReceived&&surface.authored.fill!=value&&
+            surface.soundCooldown<=0&&surface.IsVisible()&&impl_->root.IsVisible())
+        {
+            const auto& liquid=*surface.authored.liquid;
+            const auto& clip=value<surface.authored.fill?liquid.decreaseSound:liquid.increaseSound;
+            std::string error;
+            if(!clip.empty())
+            {
+                surface.PlayLiquidSound(impl_->projectRoot,clip,error);surface.soundCooldown=.15f;
+                if(!error.empty())wi::backlog::post("Liquid sound: "+error,wi::backlog::LogLevel::Warning);
+            }
+        }
+        surface.fillSampleReceived=true;
         if(found->second->authored.fill!=value)impl_->layoutDirty=true;
         if(!impl_->animation.active)found->second->authored.fill = value;
         for (auto& widget : impl_->document.widgets)
             if (widget.id == widgetId) { widget.fill = value; break; }
+    }
+
+    void ScreenRenderer::PreviewLiquidWidget(const bridge::StableId& id,bridge::ScreenColor colour,float fill)
+    {
+        const auto found=impl_->byId.find(id);
+        if(found==impl_->byId.end()||!found->second->authored.liquid)return;
+        auto& style=found->second->authored.style;
+        for(auto* v:{&style.normal,&style.hover,&style.pressed,&style.focused,&style.disabled})v->imageTint=colour;
+        SetWidgetFill(id,fill);
+    }
+
+    bool ScreenRenderer::PreviewLiquidDraft(const bridge::StableId& id,
+        const std::optional<bridge::ScreenLiquid>& liquid,bridge::ScreenFillDirection direction,
+        bridge::ScreenColor colour,float fill,std::string& error)
+    {
+        const auto found=impl_->byId.find(id);
+        if(found==impl_->byId.end()||found->second->authored.kind!=bridge::ScreenWidgetKind::Progress)
+        {error="Choose a Progress layer.";return false;}
+        auto& surface=*found->second;
+        if(liquid)
+        {
+            if(!bridge::ValidateScreenLiquidNumbers(*liquid)){error="Invalid liquid area or animation values.";return false;}
+            if(!surface.authored.liquid||surface.authored.liquid->mask!=liquid->mask)
+            {
+                std::string absolute;if(!bridge::ResolveScreenResourcePath(impl_->projectRoot,liquid->mask,absolute,error))return false;
+                auto mask=wi::resourcemanager::Load(absolute);
+                if(!mask.IsValid()||!mask.GetTexture().IsValid()){error="Cannot preview this mask image.";return false;}
+                surface.liquidMask=std::move(mask);surface.liquidFrame={};
+            }
+        }
+        surface.authored.liquid=liquid;surface.authored.fillDirection=direction;surface.liquidTick=-1;
+        for(auto* v:{&surface.authored.style.normal,&surface.authored.style.hover,&surface.authored.style.pressed,
+            &surface.authored.style.focused,&surface.authored.style.disabled})v->imageTint=colour;
+        SetWidgetFill(id,fill);impl_->layoutDirty=true;error.clear();return true;
     }
 
     void ScreenRenderer::SetWidgetText(const bridge::StableId& widgetId, const std::string& text)
@@ -1317,18 +1707,185 @@ namespace renegade::screen
         error.clear();return true;
     }
 
+    std::string ScreenRenderer::VideoInfo(const bridge::StableId& id) const
+    {
+        const auto found=impl_->byId.find(id);
+        return found==impl_->byId.end() ? std::string{} : found->second->videoDetails;
+    }
+
+    std::uint64_t ScreenRenderer::BackgroundCameraRevision() const {return impl_->cameraRevision;}
+
+    void ScreenRenderer::SetBackgroundCamera(const bridge::StableId& widget,std::optional<bridge::ScreenCameraSource> source,std::uint64_t revision,bool useAuthoredMedia)
+    {
+        impl_->cameraRevision=revision;
+        const auto found=impl_->byId.find(widget);
+        if(found==impl_->byId.end())return;
+        if(impl_->cameraSurface)impl_->cameraSurface->cameraTexture=nullptr;
+        impl_->feed.reset();
+        impl_->feedAttempted=false;
+        auto* surface=found->second;
+        surface->hideVideoForCameraOverride=!useAuthoredMedia;
+        surface->authored.cameraSource=std::move(source);
+        impl_->cameraSurface=surface->authored.cameraSource && surface->authored.visible ? surface : nullptr;
+    }
+
+    void ScreenRenderer::RefreshCarouselPresentation()
+    {
+        for(const auto& surface:impl_->surfaces) if(surface->authored.carousel)
+        {
+            const auto& deck=*surface->authored.carousel;
+            const bool hasEntry=!surface->carouselOrder.empty();
+            const size_t index=hasEntry?surface->carouselOrder[surface->carouselPosition]:0;
+            if(hasEntry)
+                for(auto& state:surface->resources) state.second=surface->carouselImages[index];
+            for(const auto& child:impl_->surfaces)
+                if(child->authored.carouselCaption && child->authored.parentId==surface->authored.id)
+                {
+                    // The normal controller refresh restores authored Text each frame.
+                    // Carousel content is transient media, independent of that baseline.
+                    child->carouselCaptionText=hasEntry?deck.entries[index].caption:std::string{};
+                    child->emptyCarouselCaption=child->carouselCaptionText->find_first_not_of(" \t\r\n")==std::string::npos;
+                }
+        }
+    }
+
+    bool ScreenRenderer::PreviewCarouselEntry(const bridge::StableId& id,size_t entry)
+    {
+        const auto it=impl_->byId.find(id);
+        if(it==impl_->byId.end() || entry>=it->second->carouselOrder.size())return false;
+        auto& surface=*it->second;
+        const auto found=std::find(surface.carouselOrder.begin(),surface.carouselOrder.end(),entry);
+        surface.carouselPosition=static_cast<size_t>(found-surface.carouselOrder.begin());
+        surface.carouselSeconds=0;
+        RefreshCarouselPresentation();
+        return true;
+    }
+
+    void ScreenRenderer::UpdateCameraFeed(float dt)
+    {
+        if (!impl_->root.IsVisible()) return;
+        for (const auto& surface : impl_->surfaces)
+        {
+            surface->MinimapInput(impl_->inputEnabled);
+            surface->UpdateMinimap(impl_->minimapShader);
+            surface->UpdateLiquid(impl_->liquidShader,dt,impl_->animation.reducedMotion);
+            if(surface->IsVisible() && surface->authored.carousel && surface->carouselOrder.size()>1 &&
+                std::isfinite(dt) && dt>0)
+            {
+                surface->carouselSeconds+=dt;
+                const auto& deck=*surface->authored.carousel;
+                if(surface->carouselSeconds>=deck.seconds)
+                {
+                    surface->carouselSeconds=std::fmod(surface->carouselSeconds,deck.seconds);
+                    const auto last=surface->carouselOrder[surface->carouselPosition];
+                    if(++surface->carouselPosition==surface->carouselOrder.size())
+                    {
+                        surface->carouselPosition=0;
+                        if(deck.shuffle)
+                        {
+                            std::shuffle(surface->carouselOrder.begin(),surface->carouselOrder.end(),surface->carouselRandom);
+                            if(surface->carouselOrder.front()==last)
+                                std::swap(surface->carouselOrder.front(),surface->carouselOrder.back());
+                        }
+                    }
+                    RefreshCarouselPresentation();
+                }
+            }
+            if (surface->IsVisible() && surface->hintDeck && surface->hintDeck->original.size()>1)
+            {
+                surface->hintSeconds+=dt;
+                if (surface->hintSeconds>=7)
+                {
+                    surface->hintSeconds=0;
+                    surface->displayedHint=surface->hintDeck->Next();
+                }
+            }
+            auto& instance=surface->videoInstance;
+            if (surface->videoAudio)
+                surface->videoAudio->Update(instance.current_time,!surface->hideVideoForCameraOverride && surface->IsVisible() &&
+                    has_flag(instance.flags,wi::video::VideoInstance::Flags::Playing));
+            if (!instance.IsValid() || !surface->IsVisible() || surface->hideVideoForCameraOverride) continue;
+            wi::video::UpdateVideo(&instance,dt);
+            if (wi::video::IsDecodingRequired(&instance))
+            {
+                auto* device=wi::graphics::GetDevice();
+                auto decode=device->BeginCommandList(wi::graphics::QUEUE_VIDEO_DECODE);
+                wi::video::DecodeVideo(&instance,decode);
+                auto resolve=device->BeginCommandList();
+                device->WaitCommandList(resolve,decode);
+                wi::video::ResolveVideoToRGB(&instance,resolve);
+            }
+            const auto source=instance.GetCurrentFrameTexture();
+            if (!source.IsValid() || surface->transparency==bridge::VideoTransparency::Opaque)
+            {
+                surface->videoFrame=source;
+                continue;
+            }
+            if (surface->matteDisplayOrder==instance.output.display_order && surface->matteFrame.IsValid()) continue;
+            using namespace wi::graphics;
+            auto* device=GetDevice();
+            if (!impl_->videoMatteShader.IsValid() && !device->CreateShader(ShaderStage::CS,kScreenVideoMatte,
+                sizeof(kScreenVideoMatte),&impl_->videoMatteShader)) continue;
+            if (!surface->matteFrame.IsValid())
+            {
+                TextureDesc desc;
+                desc.width=source.GetDesc().width;
+                desc.height=source.GetDesc().height;
+                desc.format=Format::R8G8B8A8_UNORM;
+                desc.bind_flags=BindFlag::SHADER_RESOURCE|BindFlag::UNORDERED_ACCESS;
+                if (!device->CreateTexture(&desc,nullptr,&surface->matteFrame)) continue;
+            }
+            auto cmd=device->BeginCommandList();
+            auto& target=surface->matteFrame;
+            auto barrier=GPUBarrier::Image(&target,ResourceState::SHADER_RESOURCE,ResourceState::UNORDERED_ACCESS);
+            device->Barrier(&barrier,1,cmd);
+            device->BindComputeShader(&impl_->videoMatteShader,cmd);
+            device->BindResource(&source,0,cmd);
+            device->BindUAV(&target,0,cmd);
+            const uint32_t soft=surface->transparency==bridge::VideoTransparency::SoftSmoke;
+            device->PushConstants(&soft,sizeof(soft),cmd);
+            device->Dispatch((target.GetDesc().width+7)/8,(target.GetDesc().height+7)/8,1,cmd);
+            barrier=GPUBarrier::Image(&target,ResourceState::UNORDERED_ACCESS,ResourceState::SHADER_RESOURCE);
+            device->Barrier(&barrier,1,cmd);
+            surface->matteDisplayOrder=instance.output.display_order;
+            surface->videoFrame=target;
+        }
+        auto* target=impl_->cameraSurface;
+        if(!target || !impl_->root.IsVisible())return;
+        if(!impl_->feedAttempted)
+        {
+            impl_->feedAttempted=true;
+            auto feed=std::make_unique<ScreenCameraFeed>();
+            std::string error;
+            if(feed->Open(impl_->projectRoot,impl_->document.envelope.projectId,*target->authored.cameraSource,error))
+                impl_->feed=std::move(feed);
+            else wi::backlog::post("Screen camera background: "+error,wi::backlog::LogLevel::Warning);
+        }
+        if(impl_->feed)target->cameraTexture=impl_->feed->Tick(dt);
+    }
+
+    void ScreenRenderer::SetMinimapTextureProvider(MinimapTextureProvider provider)
+    {for(auto& surface:impl_->surfaces)surface->minimapProvider=provider;}
+
     void ScreenRenderer::Reset(wi::RenderPath2D& renderPath) noexcept
     {
         DetachPresentation(renderPath);
         for(auto& surface:impl_->surfaces)surface->CancelInteraction();
         impl_->root.surfaces.clear();
+        impl_->cameraSurface=nullptr;
+        impl_->feed.reset();
+        impl_->feedAttempted=false;
         impl_->surfaces.clear();
         impl_->byId.clear();
+        impl_->navigationVisibility.clear();impl_->navigationBindingVisibility.clear();
+        impl_->hurtDynamic.clear();impl_->hurtRevision=UINT64_MAX;
+        impl_->navigationOriginal.clear();impl_->navigationDynamic.clear();impl_->navigationGlobalArtwork.clear();impl_->navigationRevision=UINT64_MAX;
         impl_->logicalRects.clear();
         impl_->scrollThumbs.clear();
         impl_->activateSink = {};
         impl_->controlSink={};
         impl_->dragSink={};
+        impl_->cameraRevision=0;
         impl_->document = {};
         impl_->projectRoot.clear();
         impl_->loaded = false;
@@ -1346,5 +1903,212 @@ namespace renegade::screen
     bool ScreenRenderer::IsLoaded() const noexcept
     {
         return impl_->loaded;
+    }
+}
+
+namespace renegade::screen
+{
+    bool ScreenRenderer::PreviewNavigationDraft(const bridge::StableId& id,const bridge::ScreenNavigation& config,
+        float heading,std::string& error,const bridge::ScreenWidget* appearance)
+    {
+        const auto found=impl_->byId.find(id);
+        if(found==impl_->byId.end()||!found->second->authored.navigation||!bridge::ValidateScreenNavigation(config,error))return false;
+        auto& surface=*found->second;const auto before=surface.authored;
+        if(appearance){surface.authored.style=appearance->style;surface.authored.resourcePath=appearance->resourcePath;}
+        surface.authored.navigation=config;
+        if(!surface.LoadNavigationArtwork(impl_->projectRoot,error)){surface.authored=before;return false;}
+        if(appearance)
+        {
+            if(surface.authored.style.text.fontResource==bridge::BuiltinScreenFont)surface.fontStyle=0;
+            else {std::string absolute;if(!bridge::ResolveScreenResourcePath(impl_->projectRoot,surface.authored.style.text.fontResource,absolute,error)){surface.authored=before;return false;}surface.fontStyle=wi::font::AddFontStyle(absolute);}
+            std::map<ScreenInteractionState,wi::Resource> loaded;
+            for(auto interaction:{ScreenInteractionState::Normal,ScreenInteractionState::Hover,ScreenInteractionState::Pressed,ScreenInteractionState::Focused,ScreenInteractionState::Disabled})
+            {
+                const auto& visual=SelectVisual(surface.authored.style,interaction);const auto& path=visual.imageResourcePath.empty()?surface.authored.resourcePath:visual.imageResourcePath;wi::Resource resource;
+                if(!path.empty()){std::string absolute;if(!bridge::ResolveScreenResourcePath(impl_->projectRoot,path,absolute,error)){surface.authored=before;return false;}resource=wi::resourcemanager::Load(absolute);
+                    if(!resource.IsValid()||!resource.GetTexture().IsValid()){surface.authored=before;error="Cannot preview navigation backing.";return false;}}
+                loaded.emplace(interaction,std::move(resource));
+            }
+            surface.resources.clear();for(auto& item:loaded)surface.resources.emplace(item.first,std::move(item.second));
+        }
+        if(config.headingSource==bridge::NavigationHeadingSource::Manual)surface.authored.navigation->manualHeading=heading;
+        auto state=std::make_shared<bridge::WorldNavigationSnapshot>();
+        state->camera={true,{},heading};state->player=state->camera;
+        if(config.targets.empty()){
+            if(config.minimap){const float range=config.minimap->range;state->targets={{"sample-enemy","Enemy","enemy","",{range*.25f,0,range*.3f},5,true},{"sample-questgiver","Quest giver","questgiver","",{-range*.25f,0,range*.3f},10,true},{"sample-vendor","Vendor","vendor","",{-range*.35f,0,-range*.25f},0,true}};}
+            else state->targets={{"sample-quest","Quest","quest","",{15,0,40},10,true},{"sample-town","Town","town","",{-25,0,60},0,true}};
+        }
+        surface.navigationSnapshot=std::move(state);surface.navigationPreview=true;error.clear();return true;
+    }
+    bool ScreenRenderer::SetNavigationState(const bridge::WorldNavigationSnapshot& state,bool includeCreated,std::string& error)
+    {
+        if(!impl_->loaded)return true;
+        if(impl_->navigationRevision!=state.revision)
+        {
+            std::set<std::string> liveArtwork;for(const auto& t:state.targets)if(!t.icon.empty())liveArtwork.insert(t.icon);
+            std::map<bridge::StableId,std::unique_ptr<ScreenSurface>> prepared;
+            for(const auto& [id,view]:state.views)
+            {
+                const auto old=impl_->byId.find(id);
+                if(view.authored&&old==impl_->byId.end())continue;
+                if(!view.authored&&!includeCreated)continue;
+                auto surface=std::make_unique<ScreenSurface>();surface->Create(view.widget.name+"#"+id);
+                surface->authored=view.widget;surface->SetVisible(view.widget.visible);surface->SetEnabled(false);surface->SetShadowRadius(0);
+                bool reuse=old!=impl_->byId.end()&&old->second->authored.navigation.has_value()&&liveArtwork==impl_->navigationGlobalArtwork;
+                if(reuse)
+                {
+                    const auto& a=old->second->authored;const auto& b=view.widget;
+                    reuse=a.resourcePath==b.resourcePath&&a.style.text.fontResource==b.style.text.fontResource&&
+                        a.navigation->bearingStrip==b.navigation->bearingStrip&&a.navigation->pointerImage==b.navigation->pointerImage&&a.navigation->icons==b.navigation->icons&&
+                        a.style.normal.imageResourcePath==b.style.normal.imageResourcePath&&a.style.hover.imageResourcePath==b.style.hover.imageResourcePath&&
+                        a.style.pressed.imageResourcePath==b.style.pressed.imageResourcePath&&a.style.focused.imageResourcePath==b.style.focused.imageResourcePath&&a.style.disabled.imageResourcePath==b.style.disabled.imageResourcePath;
+                }
+                if(reuse){surface->navigationArtwork=old->second->navigationArtwork;surface->resources=old->second->resources;surface->fontStyle=old->second->fontStyle;}
+                else
+                {
+                if(!surface->LoadNavigationArtwork(impl_->projectRoot,error,&state.targets))return false;
+                for(auto interaction:{ScreenInteractionState::Normal,ScreenInteractionState::Hover,ScreenInteractionState::Pressed,ScreenInteractionState::Focused,ScreenInteractionState::Disabled})
+                {
+                    const auto& visual=SelectVisual(view.widget.style,interaction);const auto& path=visual.imageResourcePath.empty()?view.widget.resourcePath:visual.imageResourcePath;
+                    wi::Resource resource;if(!path.empty()){std::string absolute;if(!bridge::ResolveScreenResourcePath(impl_->projectRoot,path,absolute,error))return false;
+                        resource=wi::resourcemanager::Load(absolute);if(!resource.IsValid()||!resource.GetTexture().IsValid()){error="Cannot load navigation background.";return false;}}
+                    surface->resources.emplace(interaction,std::move(resource));
+                }
+                if(view.widget.style.text.fontResource!=bridge::BuiltinScreenFont)
+                {std::string absolute;if(!bridge::ResolveScreenResourcePath(impl_->projectRoot,view.widget.style.text.fontResource,absolute,error))return false;
+                    surface->fontStyle=wi::font::AddFontStyle(absolute);if(surface->fontStyle<0){error="Cannot load navigation font.";return false;}}
+                }
+                prepared.emplace(id,std::move(surface));
+            }
+            std::vector<bridge::StableId> removed;
+            for(const auto& id:impl_->navigationDynamic)if(!prepared.count(id))removed.push_back(id);
+            for(const auto& id:removed)
+            {
+                auto* ptr=impl_->byId.at(id);auto& roots=impl_->root.surfaces;roots.erase(std::remove(roots.begin(),roots.end(),ptr),roots.end());
+                impl_->surfaces.erase(std::remove_if(impl_->surfaces.begin(),impl_->surfaces.end(),[&](const auto& p){return p.get()==ptr;}),impl_->surfaces.end());
+                auto& widgets=impl_->document.widgets;widgets.erase(std::remove_if(widgets.begin(),widgets.end(),[&](const auto& w){return w.id==id;}),widgets.end());
+                impl_->byId.erase(id);impl_->logicalRects.erase(id);impl_->navigationDynamic.erase(id);
+            }
+            for(auto& [id,surface]:prepared)
+            {
+                const auto old=impl_->byId.find(id);
+                if(old!=impl_->byId.end())
+                {
+                    old->second->authored=surface->authored;old->second->resources=std::move(surface->resources);
+                    old->second->navigationArtwork=std::move(surface->navigationArtwork);old->second->fontStyle=surface->fontStyle;
+                    for(auto& w:impl_->document.widgets)if(w.id==id){w=old->second->authored;break;}
+                }
+                else
+                {
+                    impl_->document.widgets.push_back(surface->authored);auto* ptr=surface.get();
+                    impl_->root.surfaces.push_back(ptr);impl_->byId[id]=ptr;impl_->navigationDynamic.insert(id);
+                    impl_->surfaces.push_back(std::move(surface));
+                }
+            }
+            impl_->navigationVisibility.clear();
+            for(const auto& [id,view]:state.views)if(impl_->byId.count(id))impl_->navigationVisibility[id]=view.widget.visible;
+            impl_->navigationGlobalArtwork=std::move(liveArtwork);impl_->navigationRevision=state.revision;impl_->layoutDirty=true;
+        }
+        auto snapshot=std::make_shared<bridge::WorldNavigationSnapshot>(state);snapshot->views.clear();
+        for(auto& surface:impl_->surfaces)if(surface->authored.navigation)
+        {
+            surface->navigationSnapshot=snapshot;surface->navigationPreview=false;
+            const auto view=state.views.find(surface->authored.id);if(view==state.views.end())continue;
+            const auto& id=surface->authored.id;
+            const auto binding=impl_->navigationBindingVisibility.find(id);
+            const bool visible=view->second.widget.visible&&(!view->second.authored||binding==impl_->navigationBindingVisibility.end()||binding->second);
+            if(surface->authored.visible!=visible){surface->authored.visible=visible;for(auto& w:impl_->document.widgets)if(w.id==id){w.visible=visible;break;}impl_->layoutDirty=true;}
+            surface->SetVisible(visible);
+        }
+        error.clear();return true;
+    }
+}
+
+namespace renegade::screen
+{
+    const bridge::ScreenWidget* ScreenRenderer::NavigationPrototype(const bridge::StableId& id)const
+    {
+        const auto found=impl_->navigationOriginal.find(id);
+        return found==impl_->navigationOriginal.end()?nullptr:&found->second;
+    }
+}
+
+namespace renegade::screen
+{
+    void ScreenRenderer::SetLocationAnnouncement(const std::optional<bridge::LocationAnnouncementFrame>& frame)
+    {
+        if(!impl_->loaded)return;
+        const bool found=std::any_of(impl_->surfaces.begin(),impl_->surfaces.end(),
+            [](const auto& surface){return surface->authored.locationAnnouncement;});
+        if(!found&&frame){
+            auto widget=bridge::MakeLocationAnnouncementWidget();
+            widget.rect.x=impl_->document.designWidth*.125f;widget.rect.y=impl_->document.designHeight*.21f;
+            widget.rect.width=impl_->document.designWidth*.75f;widget.rect.height=impl_->document.designHeight*.14f;
+            auto surface=std::make_unique<ScreenSurface>();surface->Create(widget.name+"#"+widget.id);
+            surface->authored=widget;surface->SetText(widget.text);surface->SetEnabled(false);surface->SetShadowRadius(0);
+            impl_->document.widgets.push_back(widget);impl_->root.surfaces.push_back(surface.get());impl_->byId[widget.id]=surface.get();
+            impl_->surfaces.push_back(std::move(surface));impl_->layoutDirty=true;
+        }
+        for(auto& surface:impl_->surfaces)if(surface->authored.locationAnnouncement){
+            surface->locationFrame=frame.value_or(bridge::LocationAnnouncementFrame{});
+            surface->locationReducedMotion=impl_->animation.reducedMotion;
+            const auto font=frame?frame->settings.font:std::string{};
+            if(surface->locationFontResource!=font){
+                surface->locationFontResource=font;surface->locationFontStyle=-1;
+                if(font==bridge::BuiltinScreenFont)surface->locationFontStyle=0;
+                else if(!font.empty()){
+                    std::string absolute,error;
+                    if(bridge::ResolveScreenResourcePath(impl_->projectRoot,font,absolute,error))
+                        surface->locationFontStyle=wi::font::AddFontStyle(absolute);
+                }
+            }
+        }
+    }
+}
+
+namespace renegade::screen
+{
+    void ScreenRenderer::PreviewHurtFeedback(const bridge::StableId& id,const bridge::HurtFeedbackFrame& frame,bool audio)
+    {
+        const auto i=impl_->byId.find(id);if(i!=impl_->byId.end()){i->second->hurtReduced=impl_->animation.reducedMotion;i->second->SetHurtFrame(frame,impl_->projectRoot,audio);}
+    }
+    bool ScreenRenderer::SetHurtFeedbackState(const bridge::HurtFeedbackSnapshot& state,bool includeCreated,bool allowAudio,std::string& error)
+    {
+        if(!impl_->loaded)return true;
+        if(impl_->hurtRevision!=state.revision){
+        std::vector<bridge::StableId> retired;for(const auto& id:impl_->hurtDynamic)if(!state.views.count(id)||!includeCreated)retired.push_back(id);
+        for(const auto& id:retired){
+            auto* ptr=impl_->byId.at(id);auto& roots=impl_->root.surfaces;roots.erase(std::remove(roots.begin(),roots.end(),ptr),roots.end());
+            impl_->surfaces.erase(std::remove_if(impl_->surfaces.begin(),impl_->surfaces.end(),[&](const auto& p){return p.get()==ptr;}),impl_->surfaces.end());
+            auto& widgets=impl_->document.widgets;widgets.erase(std::remove_if(widgets.begin(),widgets.end(),[&](const auto& w){return w.id==id;}),widgets.end());
+            impl_->byId.erase(id);impl_->logicalRects.erase(id);impl_->hurtDynamic.erase(id);impl_->layoutDirty=true;
+        }
+        for(const auto& [id,view]:state.views){
+            auto old=impl_->byId.find(id);
+            if(view.authored&&old==impl_->byId.end())continue;
+            if(!view.authored&&!includeCreated)continue;
+            if(old==impl_->byId.end()){
+                auto surface=std::make_unique<ScreenSurface>();surface->Create(view.widget.name+"#"+id);surface->authored=view.widget;
+                surface->SetShadowRadius(0);surface->SetEnabled(false);surface->SetVisible(view.widget.visible);
+                if(!surface->LoadHurtArtwork(impl_->projectRoot,error))return false;
+                auto* ptr=surface.get();impl_->document.widgets.push_back(surface->authored);impl_->root.surfaces.push_back(ptr);
+                impl_->byId[id]=ptr;impl_->hurtDynamic.insert(id);impl_->surfaces.push_back(std::move(surface));impl_->layoutDirty=true;old=impl_->byId.find(id);
+            }
+            auto& surface=*old->second;
+            auto before=surface.authored.hurt;surface.authored.hurt=view.widget.hurt;
+            if(!surface.LoadHurtArtwork(impl_->projectRoot,error)){surface.authored.hurt=before;return false;}
+            surface.authored.rect=view.widget.rect;surface.authored.style.opacity=view.widget.style.opacity;
+            for(auto& widget:impl_->document.widgets)if(widget.id==id){widget.hurt=surface.authored.hurt;widget.rect=surface.authored.rect;widget.style.opacity=surface.authored.style.opacity;break;}
+            impl_->layoutDirty=true;
+        }
+        impl_->hurtRevision=state.revision;
+        }
+        for(auto& surface:impl_->surfaces)if(surface->authored.hurt){
+            surface->hurtReduced=impl_->animation.reducedMotion;
+            const auto view=state.views.find(surface->authored.id);
+            if(view==state.views.end()){auto empty=state.frame;empty.available=false;surface->SetHurtFrame(empty,impl_->projectRoot,false);continue;}
+            surface->SetHurtFrame(state.frame,impl_->projectRoot,allowAudio);
+        }
+        error.clear();return true;
     }
 }

@@ -13,6 +13,7 @@ namespace renegade::runtime
         bool inside=false, won=false, scripted=false, active=false, fired=false, suppressArrival=false;
         float cooldown=0;
         bool healthRunning=false;
+        std::string locationId;
     };
 
     // Exactly one exit for each accepted activation, including interaction and cooldown.

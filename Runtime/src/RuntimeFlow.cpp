@@ -1,4 +1,5 @@
 #include "RuntimeFlow.h"
+#include "renegade/bridge/SceneDocumentService.h"
 
 #include "renegade/bridge/ScreenService.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
@@ -136,7 +137,7 @@ namespace renegade::runtime
         bridge::SceneService& scenes,
         RuntimeBootstrapResult& bootstrap,
         const bridge::FlowStepResult& step,
-        std::string& error)
+        std::string& error, bridge::PreparedSceneOpen* prepared)
     {
         CopyStepToResult(bootstrap, step);
         bootstrap.flowTrace = trace_;
@@ -211,7 +212,7 @@ namespace renegade::runtime
             !std::filesystem::equivalent(std::filesystem::u8path(scenePath),
                 std::filesystem::u8path(scenes.CurrentPath()),pathError)||pathError))
         {error="Cannot resume this Level: its live session is not retained.";return false;}
-        if (!resume&&!scenes.LoadScene(scenePath))
+        if (!resume && !(prepared ? scenes.LoadPreparedScene(std::move(*prepared)) : scenes.LoadScene(scenePath)))
         {
             error = "Could not load Story Flow Level scene: " +
                 scenes.LastError();

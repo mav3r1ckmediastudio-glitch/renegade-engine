@@ -1,8 +1,11 @@
 #pragma once
+#include "renegade/bridge/ScreenHurtFeedback.h"
 
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ScreenBinding.h"
 #include "renegade/bridge/ScreenAnimation.h"
+#include "renegade/bridge/ScreenLiquid.h"
+#include "renegade/bridge/ScreenNavigation.h"
 #include "renegade/bridge/ScreenTransition.h"
 #include "renegade/bridge/ScreenControl.h"
 #include "renegade/bridge/ScreenInteraction.h"
@@ -113,6 +116,9 @@ namespace renegade::bridge
     {
         Absolute,
         Anchored,
+        // Explicit local geometry inside an automatic parent. The original
+        // layout slot stays reserved so sibling allocations do not jump.
+        Manual,
     };
 
     struct ScreenTextStyle
@@ -253,6 +259,40 @@ namespace renegade::bridge
 
     enum class ScreenImageFit { Stretch, Contain, Cover };
 
+    enum class VideoTransparency : unsigned char { Auto, Opaque, RemoveBlack, SoftSmoke };
+
+    struct CarouselEntry
+    {
+        StableId id;
+        std::string image;
+        std::string caption;
+    };
+
+    struct ScreenCarousel
+    {
+        std::vector<CarouselEntry> entries;
+        bool shuffle=false;
+        float seconds=6;
+    };
+
+    struct ScreenVideoPanel
+    {
+        StableId assetId;
+        bool loop = true;
+        bool mute = true;
+        bool additive = false;
+        VideoTransparency transparency=VideoTransparency::Auto;
+    };
+
+    struct ScreenCameraSource
+    {
+        StableId levelId;
+        std::string levelPathHint;
+        StableId cameraId;
+        std::string cameraName;
+        bool slowPan = false;
+    };
+
     struct ScreenWidget
     {
         StableId id;
@@ -280,6 +320,9 @@ namespace renegade::bridge
         // Optional project-contained artwork; empty keeps the legacy solid-colour progress bar.
         std::string progressFrameResourcePath;
         std::string progressFillResourcePath;
+        std::optional<ScreenLiquid> liquid;
+        std::optional<ScreenHurtFeedback> hurt;
+        std::optional<ScreenNavigation> navigation;
         // Additive v3 contract. Free preserves existing absolute/anchor semantics.
         // Flow containers allocate equal cells to immediate children in paint order.
         ScreenContainerLayout container;
@@ -297,6 +340,13 @@ namespace renegade::bridge
         std::optional<ScreenTransitionPair> transitionOverride;
         // Optional v3 native image presentation; absent legacy field stretches artwork.
         ScreenImageFit imageFit=ScreenImageFit::Stretch;
+        bool backgroundPanel=false;
+        std::optional<ScreenCameraSource> cameraSource;
+        std::optional<ScreenVideoPanel> video;
+        std::optional<ScreenCarousel> carousel;
+        bool carouselCaption=false;
+        bool locationAnnouncement=false;
+        std::string hintListPath;
 
     };
 

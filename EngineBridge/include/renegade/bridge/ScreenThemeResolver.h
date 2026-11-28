@@ -100,7 +100,9 @@ namespace renegade::bridge
                 if(!(link.overrides&64))widget.text=exemplar->text;
                 if(!(link.overrides&128)&&IsScreenValueControl(widget.kind))widget.control=exemplar->control;
                 if(!(link.overrides&256))widget.bindings=exemplar->bindings;
-                if(!(link.overrides&512)){widget.fill=exemplar->fill;widget.fillDirection=exemplar->fillDirection;}
+                if(!(link.overrides&512)){widget.fill=exemplar->fill;widget.fillDirection=exemplar->fillDirection;
+                    widget.progressFrameResourcePath=exemplar->progressFrameResourcePath;
+                    widget.progressFillResourcePath=exemplar->progressFillResourcePath;widget.liquid=exemplar->liquid;}
             }
             active.erase(doc.envelope.documentId);
             if(!ValidateScreenDocument(next,next.envelope.projectId,error))return false;

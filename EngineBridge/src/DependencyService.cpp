@@ -62,6 +62,24 @@ namespace renegade::bridge
         {
             document.references.clear();
             document.embeddedGeneratedData.clear();
+            // Location artwork is an authored, project-owned texture reference,
+            // despite not being a material slot or a visible world mesh.
+            for(size_t i=0;i<scene.metadatas.GetCount();++i){
+                const auto& metadata=scene.metadatas[i];
+                if(metadata.int_values.has("renegade.zone.version")&&metadata.int_values.get("renegade.zone.version")==1&&
+                    metadata.int_values.has("zone.behaviour")&&metadata.int_values.get("zone.behaviour")==13&&
+                    metadata.string_values.has("location.icon"))
+                    AppendWisceneReference(document,metadata.string_values.get("location.icon"),DependencyClass::Texture,
+                        "wiscene.location["+std::to_string(i)+"].icon");
+                if(metadata.int_values.has("renegade.zone.version")&&metadata.int_values.get("renegade.zone.version")==1&&
+                    metadata.int_values.has("zone.behaviour")&&metadata.int_values.get("zone.behaviour")==13&&
+                    metadata.string_values.has("location.font")){
+                    const auto& font=metadata.string_values.get("location.font");
+                    if(font.rfind("Content/",0)==0)AppendWisceneReference(document,font,DependencyClass::Font,
+                        "wiscene.location["+std::to_string(i)+"].font");
+                }
+            }
+
 
             for (std::size_t component = 0;
                 component < scene.materials.GetCount(); ++component)
@@ -913,6 +931,12 @@ namespace renegade::bridge
         }
         RuntimeScreenDependencyDocument document;
         if (!reader_(path, document, error)) return false;
+        for (const auto& audio:document.audioPaths)
+            EmitPath(emit,audio,DependencyClass::Audio,"runtime_screen.liquid_sound");
+        for (const auto& video:document.videoPaths)
+            EmitPath(emit,video,DependencyClass::Video,"runtime_screen.video");
+        for (const auto& hints:document.hintPaths)
+            EmitPath(emit,hints,DependencyClass::Data,"runtime_screen.hint_list");
         for (std::size_t index = 0; index < document.imagePaths.size(); ++index)
             EmitPath(emit, document.imagePaths[index], DependencyClass::Texture,
                 "runtime_screen.image[" + std::to_string(index) + "].resource");

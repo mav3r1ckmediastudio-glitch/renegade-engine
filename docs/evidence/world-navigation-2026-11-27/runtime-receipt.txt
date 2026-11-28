@@ -1,0 +1,10 @@
+Renegade Runtime: play session paused.
+Renegade Runtime: play session resumed.
+Renegade Runtime: possessed Player Start with the Wicked character controller.
+Renegade Runtime: HUD attached b4ebea73-caad-4392-a1f0-8e31c301afa0 without replacing the Level.
+Renegade Runtime: governed creator Lua started 1 script instance(s) for the active Level.
+Renegade Runtime: play session paused.
+Renegade Runtime: play session resumed.
+Renegade Runtime: possessed Player Start with the Wicked character controller.
+Renegade Runtime: HUD attached b4ebea73-caad-4392-a1f0-8e31c301afa0 without replacing the Level.
+Renegade Runtime: governed creator Lua started 1 script instance(s) for the active Level.

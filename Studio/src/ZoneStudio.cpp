@@ -1,5 +1,9 @@
+#include <fstream>
+#include "renegade/bridge/CreatorScreenFontImportService.h"
+#include "renegade/bridge/ScreenCreatorResourceService.h"
 #include "StudioApplication.h"
 #include "ZoneScriptEditor.h"
+#include "renegade/bridge/WorldNavigationService.h"
 #include "renegade/bridge/ScriptLibraryService.h"
 #include <algorithm>
 #include <cmath>
@@ -11,6 +15,45 @@ namespace renegade::studio
     namespace zones = bridge::zones;
     namespace
     {
+        std::string LocationFontLabel(const std::string& root,const std::string& resource)
+        {
+            namespace fs=std::filesystem;
+            const auto fallback=fs::u8path(resource).filename().generic_u8string();
+            std::ifstream input(fs::u8path(root)/fs::u8path(resource),std::ios::binary|std::ios::ate);
+            if(!input)return fallback;
+            const auto size=input.tellg();
+            if(size<12||size>bridge::CreatorScreenFontImportService::MaximumFontBytes)return fallback;
+            std::vector<unsigned char> bytes(static_cast<size_t>(size));input.seekg(0);
+            if(!input.read(reinterpret_cast<char*>(bytes.data()),std::streamsize(bytes.size())))return fallback;
+            const auto u16=[&](size_t at){return uint32_t(bytes[at])*256+bytes[at+1];};
+            const auto u32=[&](size_t at){return (u16(at)<<16)|u16(at+2);};
+            const auto tables=u16(4);if(12+uint64_t(tables)*16>bytes.size())return fallback;
+            for(uint32_t i=0;i<tables;++i){
+                const size_t row=12+size_t(i)*16;if(u32(row)!=0x6e616d65)continue;
+                const uint64_t at=u32(row+8),length=u32(row+12);
+                if(at>bytes.size()||length>bytes.size()-at||length<6)return fallback;
+                const auto count=u16(size_t(at)+2);const uint64_t storage=at+u16(size_t(at)+4);
+                std::string best;int rank=0;
+                for(uint32_t n=0;n<count;++n){
+                    const uint64_t record=at+6+uint64_t(n)*12;if(record+12>at+length)break;
+                    const auto platform=u16(size_t(record)),name=u16(size_t(record)+6);
+                    if((platform!=0&&platform!=3)||name!=4)continue;
+                    const auto bytesCount=u16(size_t(record)+8);const uint64_t start=storage+u16(size_t(record)+10);
+                    if(!bytesCount||bytesCount%2||bytesCount>512||start>at+length||bytesCount>at+length-start)continue;
+                    const int score=u16(size_t(record)+4)==0x409?2:1;if(score<=rank)continue;
+                    std::wstring wide;for(uint32_t j=0;j<bytesCount;j+=2)wide.push_back(wchar_t(u16(size_t(start)+j)));
+                    const int lengthUtf8=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,wide.data(),int(wide.size()),nullptr,0,nullptr,nullptr);
+                    if(lengthUtf8<=0)continue;
+                    std::string label(size_t(lengthUtf8),'\0');
+                    WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,wide.data(),int(wide.size()),label.data(),lengthUtf8,nullptr,nullptr);
+                    if(std::any_of(label.begin(),label.end(),[](unsigned char c){return c<32||c==127;}))continue;
+                    best=std::move(label);rank=score;
+                }
+                return best.empty()?fallback:best;
+            }
+            return fallback;
+        }
+
         // The attachment and the box share one Undo operation. Legacy native zones
         // acquire their project script when the creator opens the source.
         bool PrepareZoneScript(bridge::StudioSession& session, const bridge::StableId& owner,
@@ -79,7 +122,7 @@ namespace renegade::studio
         zoneInspector_.AddWidget(&zoneName_);
         zonePreset_.Create("Zone behaviour");
         for (const auto& preset : zones::Presets) zonePreset_.AddItem(preset.label);
-        zonePreset_.SetMaxVisibleItemCount(13);
+        zonePreset_.SetMaxVisibleItemCount(14);
         zonePreset_.OnSelect([this](const wi::gui::EventArgs& args) {
             if (args.iValue >= 0 && args.iValue < int(zones::Behaviour::Count))
                 EditSelectedZone([&](auto& zone) {
@@ -144,6 +187,7 @@ namespace renegade::studio
         zoneScript_.SetTooltip("Open the project copy of this stock zone script. Save to refresh its preview.");
         zoneScript_.OnClick([this](const auto&) { OpenSelectedZoneScript(); });
         zoneInspector_.AddWidget(&zoneScript_);
+        CreateLocationControls();
         zoneInspector_.SetVisible(false);
     }
 
@@ -226,6 +270,15 @@ namespace renegade::studio
             if (!zoneSizes_[i].IsDragging()) zoneSizes_[i].SetValue(zone.high[i] - zone.low[i]);
             place(zoneSizes_[i]);
         }
+        LayoutLocationControls(zone,width,y);
+        if(zone.behaviour==zones::Behaviour::Location){
+            for(auto& control:zoneEvents_)control.SetVisible(false);
+            for(auto& control:zoneOptions_)control.SetVisible(false);
+            for(auto& control:zoneNumbers_)control.SetVisible(false);
+            zoneTarget_.SetVisible(false);
+            zoneScript_.SetVisible(locationAdvancedOpen_);if(locationAdvancedOpen_)place(zoneScript_);
+            return true;
+        }
         bool trigger = zone.behaviour == zones::Behaviour::Trigger;
         const auto& preset=zones::Info(zone.behaviour);
         zoneTarget_.SetVisible(*preset.targetLabel);
@@ -302,7 +355,7 @@ namespace renegade::studio
         constexpr wi::Color ZoneColors[] = {
             {228,157,100}, {244,198,92}, {117,188,245}, {237,217,128},
             {85,219,171}, {113,202,249}, {185,154,250}, {255,136,127},
-            {250,120,115}, {239,165,116}, {126,219,200}, {128,187,255}, {164,212,153}
+            {250,120,115}, {239,165,116}, {126,219,200}, {128,187,255}, {164,212,153}, {239,194,108}
         };
         static_assert(std::size(ZoneColors)==zones::Presets.size());
     }
@@ -363,7 +416,8 @@ namespace renegade::studio
                 rect(x+1,y+1,3,25,color);
                 if (atlas.IsValid()) {
                     wi::image::Params icon(x+6,y+3,21,21,color);
-                    icon.enableDrawRect({float(label.index%4)*64,float(label.index/4)*64,64,64});
+                    const size_t cell=label.index==size_t(zones::Behaviour::Location)?0:label.index;
+                    icon.enableDrawRect({float(cell%4)*64,float(cell/4)*64,64,64});
                     wi::image::Draw(&atlas.GetTexture(),icon,cmd);
                 }
                 if (!compact) {
@@ -439,7 +493,7 @@ namespace renegade::studio
             wi::renderer::DrawSphere(wi::primitive::Sphere(p,.12f),{1,.65f,.2f,1},false);
             if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
             {
-                auto command = std::make_unique<zones::Create>(scene,p);
+                auto command = std::make_unique<zones::Create>(scene,p,zonePlacementPreset_);
                 const auto created = command->Id();
                 const auto owner = command->PersistentId();
                 auto batch = std::make_unique<bridge::SelectionBatchCommand>();
@@ -449,7 +503,7 @@ namespace renegade::studio
                     bridge::StableId instance;
                     bool changed;
                     std::string error;
-                    if (!PrepareZoneScript(*session_,owner,zones::Behaviour::Trigger,*batch,instance,changed,error))
+                    if (!PrepareZoneScript(*session_,owner,zonePlacementPreset_,*batch,instance,changed,error))
                     {
                         studioChrome_.SetStatusText("ZONE LUA // " + error); return true;
                     }
@@ -484,5 +538,128 @@ namespace renegade::studio
         if (zoneFace_ < 0) return false;
         zoneDragEntity_ = id; zonePreview_ = zoneStart_; zonePointerStart_ = {pointer.x,pointer.y};
         return true;
+    }
+}
+
+
+namespace renegade::studio
+{
+    void StudioRenderPath::CreateLocationControls()
+    {
+        locationType_.Create("Location type");locationType_.SetDescription("Type ");
+        locationType_.SetTooltip("Location, questgiver, vendor, Quest, Dungeon, POI, Event or a custom type. Choose an independent icon for this location.");
+        locationType_.OnInputAccepted([this](const auto&){EditSelectedZone([&](auto& z){z.location.type=locationType_.GetValue();});});
+        zoneInspector_.AddWidget(&locationType_);
+        locationIcon_.Create("Location icon");locationIcon_.SetText("CHOOSE LOCATION ICON...");
+        locationIcon_.SetTooltip("Import an image for this location only. Other locations of the same type keep their own icons.");
+        locationIcon_.OnClick([this](const auto&){ChooseLocationIcon();});zoneInspector_.AddWidget(&locationIcon_);
+        locationAnnounce_.Create("Show location name nearby");
+        locationAnnounce_.SetTooltip("Show the location name once when the player approaches within the trigger range.");
+        locationAnnounce_.OnClick([this](const auto&){EditSelectedZone([&](auto& z){z.location.announcement.enabled=locationAnnounce_.GetCheck();});});zoneInspector_.AddWidget(&locationAnnounce_);
+        locationFont_.Create("Location name font");
+        locationFont_.SetTooltip("Choose the HUD font, a project font, or import a TrueType font. This location keeps its own choice.");
+        locationFont_.OnSelect([this](const auto& a){
+            if(a.iValue<0||size_t(a.iValue)>=locationFontPaths_.size())return;
+            const auto value=locationFontPaths_[a.iValue];
+            if(value=="::import::"){ImportLocationFont();QueueInspectorRefresh();return;}
+            if(value=="::refresh::"){locationFontsDirty_=true;QueueInspectorRefresh();return;}
+            EditSelectedZone([&](auto& z){z.location.announcement.font=value;});
+        });zoneInspector_.AddWidget(&locationFont_);
+        locationEffect_.Create("Text animation");for(const char* name:{"None","Fade in / out","Glitch","Wobble"})locationEffect_.AddItem(name);
+        locationEffect_.OnSelect([this](const auto& a){if(a.iValue>=0&&a.iValue<4)EditSelectedZone([&](auto& z){z.location.announcement.effect=bridge::LocationTextEffect(a.iValue);});});
+        locationEffect_.SetTooltip("Optional text animation. Reduced motion keeps the fade and removes wobble/glitch movement.");zoneInspector_.AddWidget(&locationEffect_);
+        const char* labels[]={"ANNOUNCE RANGE (m)","TOTAL DISPLAY TIME (s)","FADE IN (s)","FADE OUT (s)","EFFECT STRENGTH (px)","EFFECT SPEED"};
+        const float lo[]={0,.1f,0,0,0,.1f},hi[]={10000,600,60,60,128,30};
+        for(size_t i=0;i<locationNumbers_.size();++i){
+            auto& control=locationNumbers_[i];control.Create(lo[i],hi[i],i==0?40.f:4.f,1000,labels[i],labels[i]);
+            control.SetTooltip(i==0?"Horizontal distance from the zone's placement in metres.":i==1?"Total time on screen, including fade in and fade out.":labels[i]);
+            control.OnValueCommitted([this,i](float value){EditSelectedZone([&](auto& z){auto& a=z.location.announcement;switch(i){case 0:a.range=value;break;case 1:a.duration=value;break;case 2:a.fadeIn=value;break;case 3:a.fadeOut=value;break;case 4:a.strength=value;break;case 5:a.speed=value;break;}});});
+            zoneInspector_.AddWidget(&control);
+        }
+        locationAdvanced_.Create("Advanced location settings");locationAdvanced_.SetText("ADVANCED...");
+        locationAdvanced_.OnClick([this](const auto&){locationAdvancedOpen_=!locationAdvancedOpen_;QueueInspectorRefresh();});zoneInspector_.AddWidget(&locationAdvanced_);
+        locationRepeat_.Create("Repeat announcement on return");locationRepeat_.SetTooltip("Requires leaving beyond the trigger range plus a small margin before it can trigger again.");
+        locationRepeat_.OnClick([this](const auto&){EditSelectedZone([&](auto& z){z.location.announcement.repeatOnReturn=locationRepeat_.GetCheck();});});zoneInspector_.AddWidget(&locationRepeat_);
+        locationCompass_.Create("Show on navigation");locationCompass_.OnClick([this](const auto&){EditSelectedZone([&](auto& z){z.location.showOnCompass=locationCompass_.GetCheck();});});zoneInspector_.AddWidget(&locationCompass_);
+        locationVisibility_.Create("Map / compass discovery");locationVisibility_.AddItem("Show before discovery");locationVisibility_.AddItem("Show after entering zone");
+        locationVisibility_.OnSelect([this](const auto& a){EditSelectedZone([&](auto& z){z.location.onlyAfterDiscovery=a.iValue==1;});});zoneInspector_.AddWidget(&locationVisibility_);
+    }
+    void StudioRenderPath::LayoutLocationControls(const zones::Definition& z,float width,float& y)
+    {
+        const bool show=z.behaviour==zones::Behaviour::Location;
+        for(wi::gui::Widget* control:std::array<wi::gui::Widget*,9>{&locationFont_,&locationType_,&locationIcon_,&locationAnnounce_,&locationEffect_,&locationAdvanced_,&locationRepeat_,&locationCompass_,&locationVisibility_})control->SetVisible(show);
+        for(auto& control:locationNumbers_)control.SetVisible(show);
+        if(!show)return;
+        auto place=[&](wi::gui::Widget& w){w.SetPos({12,y});w.SetSize({width,26});y+=35;};
+        auto check=[&](wi::gui::CheckBox& w){w.SetPos({12+width-20,y});w.SetSize({20,20});y+=35;};
+        locationType_.SetValue(z.location.type);place(locationType_);place(locationIcon_);
+        locationIcon_.SetText(z.location.icon.empty()?"CHOOSE LOCATION ICON...":"CHANGE LOCATION ICON...");
+        locationAnnounce_.SetCheck(z.location.announcement.enabled);check(locationAnnounce_);
+        const auto& a=z.location.announcement;
+        const float values[]={a.range,a.duration,a.fadeIn,a.fadeOut,a.strength,a.speed};
+        for(size_t i=0;i<2;++i){auto& control=locationNumbers_[i];control.SetVisible(a.enabled);if(a.enabled){if(!control.IsDragging())control.SetValue(values[i]);place(control);}}
+        locationEffect_.SetVisible(a.enabled);if(a.enabled){locationEffect_.SetSelectedWithoutCallback(int(a.effect));place(locationEffect_);}
+        locationFont_.SetVisible(a.enabled);
+        if(a.enabled){
+            const auto root=session_->Projects().HasProject()?session_->Projects().CurrentProject().rootPath:std::string{};
+            if(locationFontsDirty_||locationFontRoot_!=root)RefreshLocationFonts();
+            auto found=std::find(locationFontPaths_.begin(),locationFontPaths_.end(),a.font);
+            if(found==locationFontPaths_.end()&&!a.font.empty()){
+                locationFontPaths_.push_back(a.font);locationFont_.AddItem(a.font);found=std::prev(locationFontPaths_.end());
+            }
+            locationFont_.SetSelectedWithoutCallback(found==locationFontPaths_.end()?0:int(found-locationFontPaths_.begin()));place(locationFont_);
+        }
+
+        locationAdvanced_.SetText(locationAdvancedOpen_?"ADVANCED: OPEN":"ADVANCED...");place(locationAdvanced_);
+        for(size_t i=2;i<6;++i){auto& control=locationNumbers_[i];control.SetVisible(locationAdvancedOpen_&&a.enabled);if(control.IsVisible()){if(!control.IsDragging())control.SetValue(values[i]);place(control);}}
+        locationRepeat_.SetVisible(locationAdvancedOpen_&&a.enabled);if(locationRepeat_.IsVisible()){locationRepeat_.SetCheck(a.repeatOnReturn);check(locationRepeat_);}
+        locationCompass_.SetVisible(locationAdvancedOpen_);locationVisibility_.SetVisible(locationAdvancedOpen_);
+        if(locationAdvancedOpen_){locationCompass_.SetCheck(z.location.showOnCompass);check(locationCompass_);locationVisibility_.SetSelectedWithoutCallback(z.location.onlyAfterDiscovery?1:0);place(locationVisibility_);}
+    }
+    void StudioRenderPath::RefreshLocationFonts()
+    {
+        locationFontsDirty_=false;locationFontPaths_={"",bridge::BuiltinScreenFont};locationFont_.ClearItems();
+        locationFont_.AddItem("Use HUD text font");locationFont_.AddItem("Built-in: Liberation Sans");
+        locationFontRoot_=session_&&session_->Projects().HasProject()?session_->Projects().CurrentProject().rootPath:std::string{};
+        if(!locationFontRoot_.empty()){
+            const auto fonts=bridge::EnumerateScreenCreatorResources(locationFontRoot_,session_->Projects().CurrentProject().projectId,bridge::ScreenCreatorResourceKind::Font);
+            for(const auto& choice:fonts.choices){
+                locationFontPaths_.push_back(choice.projectRelativePath);locationFont_.AddItem(LocationFontLabel(locationFontRoot_,choice.projectRelativePath)+" ["+choice.assetId.substr(0,6)+"]");
+            }
+        }
+        locationFontPaths_.push_back("::import::");locationFont_.AddItem("Import TrueType font...");
+        locationFontPaths_.push_back("::refresh::");locationFont_.AddItem("Refresh project fonts");
+        locationFont_.SetMaxVisibleItemCount(10);
+    }
+    void StudioRenderPath::ImportLocationFont()
+    {
+        if(!session_||!session_->Projects().HasProject())return;
+        const auto entity=session_->Selection().SelectedEntity();const auto owner=bridge::PersistentEntityId(session_->Scenes().GetScene(),entity);
+        const auto root=session_->Projects().CurrentProject().rootPath;const auto project=session_->Projects().CurrentProject().projectId;
+        wi::helper::FileDialogParams dialog;dialog.type=wi::helper::FileDialogParams::OPEN;
+        dialog.description="Import location name TrueType font";dialog.extensions={"ttf"};
+        wi::helper::FileDialog(dialog,[this,entity,owner,root,project](const std::string& source){if(source.empty())return;
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,entity,owner,root,project,source](uint64_t){
+                if(!session_||!session_->Projects().HasProject()||session_->Projects().CurrentProject().rootPath!=root||
+                    session_->Selection().SelectedEntity()!=entity||bridge::PersistentEntityId(session_->Scenes().GetScene(),entity)!=owner)return;
+                const auto result=bridge::CreatorScreenFontImportService::Import(root,project,source);
+                if(!result.succeeded){studioChrome_.SetStatusText(result.error);return;}
+                locationFontsDirty_=true;EditSelectedZone([&](auto& z){z.location.announcement.font=result.runtimePath;});
+            });
+        });
+    }
+    void StudioRenderPath::ChooseLocationIcon()
+    {
+        if(!session_||!session_->Projects().HasProject())return;
+        const auto entity=session_->Selection().SelectedEntity();const auto owner=bridge::PersistentEntityId(session_->Scenes().GetScene(),entity);
+        const auto root=session_->Projects().CurrentProject().rootPath;const auto project=session_->Projects().CurrentProject().projectId;
+        wi::helper::FileDialogParams dialog;dialog.type=wi::helper::FileDialogParams::OPEN;dialog.description="Choose a location icon";dialog.extensions={"png","jpg","jpeg","bmp"};
+        wi::helper::FileDialog(dialog,[this,entity,owner,root,project](const std::string& source){if(source.empty())return;
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,entity,owner,root,project,source](uint64_t){
+                if(!session_||!session_->Projects().HasProject()||session_->Projects().CurrentProject().rootPath!=root||session_->Selection().SelectedEntity()!=entity||bridge::PersistentEntityId(session_->Scenes().GetScene(),entity)!=owner)return;
+                std::string resource,error;if(!bridge::ImportScreenNavigationImage(root,project,source,resource,error)){studioChrome_.SetStatusText(error);return;}
+                EditSelectedZone([&](auto& z){z.location.icon=resource;});
+            });
+        });
     }
 }

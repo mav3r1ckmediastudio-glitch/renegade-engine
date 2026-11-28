@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.location",
+  "package_version": "1.0.0",
+  "display_name": "Location",
+  "files": [
+    {
+      "path": "LocationZone.lua",
+      "content_hash": "fnv1a64:a89063aff155d985",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "LocationZone.lua"
+  ]
+}

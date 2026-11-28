@@ -1,3 +1,4 @@
+#include "renegade/bridge/WorldNavigationService.h"
 #include "renegade/bridge/ScreenAuthoringSession.h"
 #include "renegade/bridge/InventoryPagedScreenAdapter.h"
 #include "renegade/bridge/ScreenThemeResolver.h"
@@ -135,10 +136,16 @@ namespace renegade::bridge
         coalescedMutationCreated_ = false;
     }
 
-    bool ScreenAuthoringSession::UpdateWidget(
-        const StableId& widgetId,
-        ScreenWidgetAuthoringEdit edit,
-        std::string& error)
+    bool ScreenAuthoringSession::UpdateWidget(const StableId& widgetId,
+        ScreenWidgetAuthoringEdit edit, std::string& error)
+    {return UpdateWidgetGeometry(widgetId,std::move(edit),false,error);}
+
+    bool ScreenAuthoringSession::UpdateWidgetManually(const StableId& widgetId,
+        ScreenWidgetAuthoringEdit edit, std::string& error)
+    {return UpdateWidgetGeometry(widgetId,std::move(edit),true,error);}
+
+    bool ScreenAuthoringSession::UpdateWidgetGeometry(const StableId& widgetId,
+        ScreenWidgetAuthoringEdit edit, bool manualOverride, std::string& error)
     {
         if (!loaded_)
         {
@@ -184,12 +191,20 @@ namespace renegade::bridge
         }
 
         const auto* parent=FindWidget(found->parentId);
-        if(parent&&EffectiveScreenChildLayout(parent->container,Document().designWidth)!=ScreenChildLayout::Free&&
-            (std::abs(currentResolved.x-edit.resolvedRect.x)>0.051f||
-             std::abs(currentResolved.y-edit.resolvedRect.y)>0.051f||
-             std::abs(currentResolved.width-edit.resolvedRect.width)>0.051f||
-             std::abs(currentResolved.height-edit.resolvedRect.height)>0.051f))
-        {error="Geometry is managed by the parent container. Edit the parent layout or reparent this element.";return false;}
+        const bool managed=parent&&found->layoutMode!=ScreenLayoutMode::Manual&&
+            EffectiveScreenChildLayout(parent->container,Document().designWidth)!=ScreenChildLayout::Free;
+        const bool geometryChanged=std::abs(currentResolved.x-edit.resolvedRect.x)>0.051f||
+            std::abs(currentResolved.y-edit.resolvedRect.y)>0.051f||
+            std::abs(currentResolved.width-edit.resolvedRect.width)>0.051f||
+            std::abs(currentResolved.height-edit.resolvedRect.height)>0.051f;
+        if(managed&&geometryChanged)
+        {
+            if(!manualOverride)
+            {error="Geometry is managed by the parent container. Edit the parent layout or reparent this element.";return false;}
+            found->layoutMode=ScreenLayoutMode::Manual;
+            if(candidate.schemaVersion<3)
+            {candidate.migratedFromVersion=candidate.schemaVersion;candidate.schemaVersion=3;}
+        }
         if(found->component)
         {
             if(found->text!=edit.text)found->component->overrides|=64;
@@ -203,7 +218,7 @@ namespace renegade::bridge
         if (edit.fill) found->fill = *edit.fill;
         if (edit.fillDirection) found->fillDirection = *edit.fillDirection;
 
-        if(parent&&EffectiveScreenChildLayout(parent->container,Document().designWidth)!=ScreenChildLayout::Free)
+        if(managed&&!geometryChanged)
             return CommitMutation(std::move(candidate),error);
         ScreenRect parentRect{0.0f, 0.0f,
   candidate.designWidth, candidate.designHeight};
@@ -219,7 +234,7 @@ namespace renegade::bridge
         }
         const float relativeX = edit.resolvedRect.x - parentRect.x;
         const float relativeY = edit.resolvedRect.y - parentRect.y;
-        if (found->layoutMode == ScreenLayoutMode::Absolute)
+        if (found->layoutMode != ScreenLayoutMode::Anchored)
   found->rect = {relativeX, relativeY, edit.resolvedRect.width, edit.resolvedRect.height};
         else
         {
@@ -290,7 +305,7 @@ namespace renegade::bridge
         }
 
         ScreenDocument candidate = Document();
-        if ((widget.kind == ScreenWidgetKind::Progress || IsScreenValueControl(widget.kind) || !widget.bindings.empty() || !widget.animations.empty() || widget.container.mode != ScreenChildLayout::Free || widget.container.compactBelowWidth>0) && candidate.schemaVersion < 3)
+        if ((widget.hurt || widget.navigation || widget.carousel || widget.video || widget.kind == ScreenWidgetKind::Progress || IsScreenValueControl(widget.kind) || !widget.bindings.empty() || !widget.animations.empty() || widget.container.mode != ScreenChildLayout::Free || widget.container.compactBelowWidth>0) && candidate.schemaVersion < 3)
         {
             candidate.migratedFromVersion = candidate.schemaVersion;
             candidate.schemaVersion = 3;
@@ -313,11 +328,30 @@ namespace renegade::bridge
         }
 
         const StableId newId = widget.id;
+        std::optional<ScreenWidget> caption;
+        if (widget.carousel)
+        {
+            auto& child=caption.emplace();
+            child.id=GenerateStableId();
+            child.parentId=newId;
+            child.carouselCaption=true;
+            child.name="Carousel caption";
+            child.kind=ScreenWidgetKind::Text;
+            child.enabled=false;
+            child.rect={0,widget.rect.height+8,widget.rect.width,80};
+            child.layoutMode=ScreenLayoutMode::Anchored;
+            child.anchors={0,1,1,1,0,8,0,88};
+            child.style=MakeScreenWidgetStyleTemplate(child.kind,24);
+            child.style.text.fontSize=24;
+            child.style.text.wrap=true;
+            child.style.text.horizontalAlignment=ScreenHorizontalAlignment::Center;
+        }
         if (insertAtBack)
             candidate.widgets.insert(candidate.widgets.begin(), std::move(widget));
         else
             candidate.widgets.push_back(std::move(widget));
 
+        if (caption) candidate.widgets.push_back(std::move(*caption));
         const auto* created = [&candidate, &newId]() -> const ScreenWidget*
         {
             const auto found = std::find_if(
@@ -858,7 +892,7 @@ namespace renegade::bridge
                 p.width-=doc.safeArea.left+doc.safeArea.right;
                 p.height-=doc.safeArea.top+doc.safeArea.bottom;
             }
-            if(w.layoutMode==ScreenLayoutMode::Absolute)
+            if(w.layoutMode!=ScreenLayoutMode::Anchored)
                 w.rect={rect.x-p.x,rect.y-p.y,rect.width,rect.height};
             else
             {
@@ -984,14 +1018,14 @@ namespace renegade::bridge
         for(const auto& id:roots)
         {
             const auto* parent=FindWidget(FindWidget(id)->parentId);
-            if(parent&&EffectiveScreenChildLayout(parent->container,Document().designWidth)!=ScreenChildLayout::Free)
+            if(FindWidget(id)->layoutMode!=ScreenLayoutMode::Manual&&parent&&EffectiveScreenChildLayout(parent->container,Document().designWidth)!=ScreenChildLayout::Free)
             {error="Move the container or reorder its children; their positions are layout-managed.";return false;}
         }
         if(dx==0&&dy==0){error.clear();return true;}
         auto c=Document();
         for(auto& w:c.widgets)if(roots.count(w.id))
         {
-            if(w.layoutMode==ScreenLayoutMode::Absolute){w.rect.x+=dx;w.rect.y+=dy;}
+            if(w.layoutMode!=ScreenLayoutMode::Anchored){w.rect.x+=dx;w.rect.y+=dy;}
             else{w.anchors.offsetMinimumX+=dx;w.anchors.offsetMaximumX+=dx;
                 w.anchors.offsetMinimumY+=dy;w.anchors.offsetMaximumY+=dy;}
         }
@@ -1355,7 +1389,7 @@ namespace renegade::bridge
         for(const auto& w:Document().widgets) if(roots.count(w.id))
         {
             const auto* parent=FindWidget(w.parentId);
-            if(parent&&EffectiveScreenChildLayout(parent->container,Document().designWidth)!=ScreenChildLayout::Free)
+            if(w.layoutMode!=ScreenLayoutMode::Manual&&parent&&EffectiveScreenChildLayout(parent->container,Document().designWidth)!=ScreenChildLayout::Free)
             {error="Selected child geometry is layout-managed.";return false;}
             ScreenRect r;if(!ResolveScreenWidgetRect(Document(),w.id,r,error))return false;
             if(first){bounds=r;first=false;}else{
@@ -1368,7 +1402,7 @@ namespace renegade::bridge
         bool more=true;while(more){more=false;for(const auto& w:Document().widgets)
             if(affected.count(w.parentId)){
                 const auto* parent=FindWidget(w.parentId);
-                if(parent&&EffectiveScreenChildLayout(parent->container,Document().designWidth)==ScreenChildLayout::Free)
+                if(w.layoutMode==ScreenLayoutMode::Manual||(parent&&EffectiveScreenChildLayout(parent->container,Document().designWidth)==ScreenChildLayout::Free))
                     more=affected.insert(w.id).second||more;}}
         for(const auto& w:Document().widgets)if(affected.count(w.id)){
             if(w.component){error="Detach linked components before batch geometry editing.";return false;}
@@ -1391,7 +1425,7 @@ namespace renegade::bridge
                 auto w=std::find_if(c.widgets.begin(),c.widgets.end(),[&](const auto& w){return w.id==i->first;});
                 if(w==c.widgets.end()||w->component){error="Captured selection changed.";return false;}
                 const auto parent=std::find_if(c.widgets.begin(),c.widgets.end(),[&](const auto& p){return p.id==w->parentId;});
-                if(parent!=c.widgets.end()&&EffectiveScreenChildLayout(parent->container,c.designWidth)!=ScreenChildLayout::Free)
+                if(w->layoutMode!=ScreenLayoutMode::Manual&&parent!=c.widgets.end()&&EffectiveScreenChildLayout(parent->container,c.designWidth)!=ScreenChildLayout::Free)
                 {error="Captured child is now layout-managed.";return false;}
                 if(std::any_of(pending.begin(),pending.end(),[&](const auto& p){return p.first==w->parentId;})){++i;continue;}
                 const auto& r=i->second;ScreenRect n{target.x+(r.x-bounds.x)*sx,target.y+(r.y-bounds.y)*sy,r.width*sx,r.height*sy};
@@ -1409,5 +1443,60 @@ namespace renegade::bridge
             if(!progress){error="Invalid captured parent graph.";return false;}
         }
         return CommitMutation(std::move(c),error);
+    }
+}
+
+namespace renegade::bridge
+{
+    bool ScreenAuthoringSession::ConfigureProgressFill(const StableId& id,
+        std::optional<ScreenLiquid> liquid,ScreenColor colour,
+        std::vector<ScreenBinding> bindings,ScreenFillDirection direction,std::string& error)
+    {
+        if(!loaded_){error="No Screen is open.";return false;}
+        auto candidate=Document();
+        const auto w=std::find_if(candidate.widgets.begin(),candidate.widgets.end(),[&](const auto& item){return item.id==id;});
+        if(w==candidate.widgets.end()||w->kind!=ScreenWidgetKind::Progress)
+        {error="Select a Progress or Liquid Fill layer.";return false;}
+        w->liquid=std::move(liquid);w->bindings=std::move(bindings);w->fillDirection=direction;w->themeOverrides|=1;
+        for(auto* v:{&w->style.normal,&w->style.hover,&w->style.pressed,&w->style.focused,&w->style.disabled})v->imageTint=colour;
+        if(w->component)w->component->overrides|=1|256|512;
+        if(candidate.schemaVersion<3){candidate.migratedFromVersion=candidate.schemaVersion;candidate.schemaVersion=3;}
+        return CommitMutation(std::move(candidate),error);
+    }
+}
+
+namespace renegade::bridge
+{
+    bool ScreenAuthoringSession::ConfigureNavigation(const StableId& id,std::optional<ScreenNavigation> config,std::string& error)
+    {
+        if(!loaded_){error="No Screen is open.";return false;}
+        auto d=Document();auto w=std::find_if(d.widgets.begin(),d.widgets.end(),[&](const auto& item){return item.id==id;});
+        if(w==d.widgets.end()||w->kind!=ScreenWidgetKind::Image){error="Select a navigation Image layer.";return false;}
+        w->navigation=std::move(config);if(w->component)w->component->overrides|=512;
+        if(d.schemaVersion<3){d.migratedFromVersion=d.schemaVersion;d.schemaVersion=3;}
+        return CommitMutation(std::move(d),error);
+    }
+    bool ScreenAuthoringSession::ApplyNavigationAppearance(const StableId& id,const ScreenWidget& appearance,std::string& error,bool keepAssignedIcons)
+    {
+        if(!loaded_||!appearance.navigation){error="Choose a navigation appearance.";return false;}
+        auto d=Document();auto w=std::find_if(d.widgets.begin(),d.widgets.end(),[&](const auto& item){return item.id==id;});
+        if(w==d.widgets.end()||!w->navigation){error="Select a navigation layer.";return false;}
+        if(!ApplyNavigationAppearanceDraft(*w,appearance,error,keepAssignedIcons))return false;
+        return CommitMutation(std::move(d),error);
+    }
+}
+
+namespace renegade::bridge
+{
+    bool ScreenAuthoringSession::ConfigureNavigationComponent(const StableId& id,const ScreenWidget& draft,std::string& error)
+    {
+        if(!loaded_){error="No Screen is open.";return false;}
+        auto d=Document();auto w=std::find_if(d.widgets.begin(),d.widgets.end(),[&](const auto& item){return item.id==id;});
+        if(w==d.widgets.end()||w->kind!=ScreenWidgetKind::Image||!draft.navigation)
+        {error="Select a navigation Image layer.";return false;}
+        w->navigation=draft.navigation;w->resourcePath=draft.resourcePath;w->style=draft.style;w->themeOverrides=63;
+        if(w->component)w->component->overrides|=63|512;
+        if(d.schemaVersion<3){d.migratedFromVersion=d.schemaVersion;d.schemaVersion=3;}
+        return CommitMutation(std::move(d),error);
     }
 }

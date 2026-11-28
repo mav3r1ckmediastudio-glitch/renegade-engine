@@ -215,7 +215,7 @@ try {
             throw "S7 packaged Studio must contain exactly six stock Lua Actions."
         }
 
-        foreach ($zone in @("Trigger", "Win", "Message", "Objective", "Checkpoint", "Transition", "Teleport", "Health", "Kill", "Encounter", "Dialogue", "Ambience", "Environment")) {
+        foreach ($zone in @("Trigger", "Win", "Message", "Objective", "Checkpoint", "Transition", "Teleport", "Health", "Kill", "Encounter", "Dialogue", "Ambience", "Environment", "Location")) {
             $zonePackage = Join-Path $packageRoot "Content\ScriptLibrary\RenegadeZones\$zone"
             foreach ($file in @("renegade-script-package.json", "${zone}Zone.lua")) {
                 if (-not (Test-Path (Join-Path $zonePackage $file) -PathType Leaf)) {

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -24,6 +25,11 @@
 
 namespace renegade::studio
 {
+    class ScreenCarouselEditor;
+    class ScreenLiquidEditor;
+    class ScreenNavigationEditor;
+    class ScreenMinimapEditor;
+    class ScreenHurtEditor;
     // Native Screen authoring workspace. Gate 8C established selection,
     // Inspector editing and shared Runtime preview; Gate 8D adds creator-level
     // element transactions while keeping ScreenAuthoringSession authoritative.
@@ -31,7 +37,14 @@ namespace renegade::studio
     {
     public:
         void Create();
+        void DropScreenVideo(const std::string& path,const XMFLOAT4& point);
+        screen::ScreenInteractionState BasicPreviewState() const noexcept
+        {
+            if (stateOwner_ != selectedWidgetId_ || inspectorSuppressed_) return screen::ScreenInteractionState::Normal;
+            return static_cast<screen::ScreenInteractionState>(basicState_);
+        }
         void SetLayout(float width, float height);
+        void FinishEditingGesture();
         void Bind(
             bridge::ScreenAuthoringSession* session,
             screen::ScreenRenderer* renderer);
@@ -84,6 +97,8 @@ namespace renegade::studio
             });
         }
 
+        const bridge::StableId& PreviewRouteContext() const {return routeContext_;}
+        void OnPreviewRequested(std::function<void()> callback){previewRequested_=std::move(callback);}
         void OnUiBudgetsRequested(std::function<void()> callback){uiBudgetsRequested_=std::move(callback);}
         void OnPortableLibraryRequested(std::function<void(bool)> callback){portableLibraryRequested_=std::move(callback);}
         void ReportLibraryStatus(std::string message){SetStatus(std::move(message));}
@@ -114,12 +129,15 @@ namespace renegade::studio
             const bridge::ScreenDocument&, const bridge::StableId&,
             const bridge::StableId&, bool&, std::string&)>;
         void OnOpenScreenRoute(OpenScreenRouteCallback callback);
+        void OnDestinationName(std::function<std::string(const std::string&)> callback) { destinationName_ = std::move(callback); }
+        void OnEditButtonState(std::function<void(unsigned, bool)> callback) { editState_ = std::move(callback); }
         using RouteHistoryCallback = std::function<bool(bool undo, std::string&)>;
         void OnRouteHistoryAction(RouteHistoryCallback callback);
         using CoordinatedSaveCallback = std::function<bool(
             bridge::ScreenAuthoringSession&, std::string&)>;
         void OnCoordinatedSave(CoordinatedSaveCallback callback);
         void OnImageAssetRequested(std::function<void()> callback);
+        bool ChoosingImageSource() const {return chooseImageSource_;}
         void OnGraphicRequested(std::function<void(bool)> callback){graphicRequested_=std::move(callback);}
         void ReportGraphicStatus(std::string message,bool error) {
             SetStatus(message);inventoryInspector_.ReportGraphicStatus(std::move(message),error);
@@ -141,7 +159,7 @@ namespace renegade::studio
         void SetOverlayInputBlocked(bool blocked) noexcept { overlayInputBlocked_ = blocked; }
         [[nodiscard]] bool HasOpenPopup() const noexcept
         {
-            return screenSettingsPicker_.IsOpen() || basicActionPicker_.IsOpen() ||
+            return hurtEditorOpen_ || minimapEditorOpen_ || navigationEditorOpen_ || liquidEditorOpen_ || carouselEditorOpen_ || screenSettingsPicker_.IsOpen() || basicActionPicker_.IsOpen() ||
                 destinationPicker_.IsOpen();
         }
         [[nodiscard]] bool IsFocusCanvas() const noexcept
@@ -210,7 +228,7 @@ namespace renegade::studio
         void RedoScreen();
         void ToggleVisible();
         void ToggleEnabled();
-        void CreateElement(bridge::ScreenWidgetKind kind, bool background);
+        void CreateElement(bridge::ScreenWidgetKind kind, bool background, const XMFLOAT4* drop = nullptr, bool video = false, const bridge::StableId& videoId = {}, bool carousel=false);
         void DuplicateSelectedWidget();
         void DeleteSelectedWidget();
         void MoveSelectedWidgetToBack();
@@ -259,6 +277,11 @@ namespace renegade::studio
         bool minimapSuppressDrag_ = false;
         bool cameraPanning_ = false;
         XMFLOAT2 cameraLastPointer_ = {};
+        std::function<void()> previewRequested_;
+        RenegadeButton previewButton_;
+        RenegadeButton copyBackgroundButton_,cameraBackgroundButton_,panBackgroundButton_,videoLoop_,videoMute_;
+        void ChooseBackgroundCamera();
+        void ChooseBackgroundDestinations();
         RenegadeButton fitCanvasButton_;
         RenegadeButton screenSettingsButton_;
         RenegadeScreenChoicePicker screenSettingsPicker_;
@@ -338,10 +361,44 @@ namespace renegade::studio
         RenegadeButton undoButton_;
         RenegadeButton redoButton_;
         RenegadeTextInputField toolboxSearchInput_;
+        std::shared_ptr<ScreenCarouselEditor> carouselEditor_;
+        bool carouselEditorOpen_=false;
+        std::shared_ptr<ScreenHurtEditor> hurtEditor_;
+        bool hurtEditorOpen_=false;
+        void OpenHurtEditor();
+        std::shared_ptr<ScreenMinimapEditor> minimapEditor_;
+        bool minimapEditorOpen_=false;
+        std::shared_ptr<ScreenNavigationEditor> navigationEditor_;
+        bool navigationEditorOpen_=false;
+        void OpenNavigationEditor();
+        std::shared_ptr<ScreenLiquidEditor> liquidEditor_;
+        bool liquidEditorOpen_=false;
+        const bridge::ScreenWidget* FindSelectedLiquid() const;
+        void OpenLiquidEditor();
+        void SaveSelectedUiPrefab();
+        void ChooseUiPrefab();
+        void InsertUiPrefab(const std::string& package,bool top=false);
+        void ChooseExternalUiPrefab();
         RenegadeButton imageAssetButton_;
         RenegadeButton progressFrameButton_;
         RenegadeButton progressFillButton_;
+        bool paletteButtonPending_ = false;
+        bool paletteVideo_ = false;
+        bool paletteCarousel_ = false;
+        void ChooseScreenMedia();
+        bool chooseImageSource_=false;
+        void ChooseHintList();
+        XMFLOAT4 palettePress_ = {};
         RenegadeButton appearanceButton_;
+        RenegadeButton stateTabs_[3];
+        RenegadeButton stateImage_, stateColour_;
+        RenegadeButton clickSound_, previewSound_, defaultSound_;
+        void ChooseClickSound();
+        void UpdateClickSound(const std::string& command, const std::string& clip = {});
+        unsigned basicState_ = 0;
+        bridge::StableId stateOwner_;
+        std::function<void(unsigned, bool)> editState_;
+        std::function<std::string(const std::string&)> destinationName_;
         RenegadeButton basicActionButton_;
         RenegadeScreenChoicePicker basicActionPicker_;
         RenegadeButton destinationButton_;

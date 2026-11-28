@@ -926,6 +926,22 @@ namespace renegade::studio
         std::array<SceneInspectorComboBox, 3> zoneOptions_;
         std::array<SceneInspectorSlider, 3> zoneNumbers_;
         SceneInspectorButton zoneScript_;
+        SceneInspectorButton locationIcon_,locationAdvanced_;
+        SceneInspectorTextInputField locationType_;
+        SceneInspectorComboBox locationEffect_,locationVisibility_,locationFont_;
+        std::vector<std::string> locationFontPaths_;
+        std::string locationFontRoot_;
+        bool locationFontsDirty_=true;
+        std::array<SceneInspectorSlider,6> locationNumbers_;
+        wi::gui::CheckBox locationAnnounce_,locationRepeat_,locationCompass_;
+        bool locationAdvancedOpen_=false;
+        bridge::zones::Behaviour zonePlacementPreset_=bridge::zones::Behaviour::Trigger;
+        void CreateLocationControls();
+        void LayoutLocationControls(const bridge::zones::Definition&,float width,float& y);
+        void ChooseLocationIcon();
+        void RefreshLocationFonts();
+        void ImportLocationFont();
+
         void OpenSelectedZoneScript();
         std::array<SceneInspectorSlider, 3> zoneSizes_;
         SceneInspectorTextInputField zoneName_;
@@ -1974,6 +1990,10 @@ namespace renegade::studio
     {
     public:
         void SetStartupScene(std::string filePath);
+        void DropScreenVideo(const std::string& file,float x,float y)
+        {
+            if (GetActivePath()==&screenEditorRenderer_) screenEditorRenderer_.DropVideo(file,x,y);
+        }
         void SetExitRequestHandler(std::function<void()> handler);
         void RequestExit();
         void Initialize() override;

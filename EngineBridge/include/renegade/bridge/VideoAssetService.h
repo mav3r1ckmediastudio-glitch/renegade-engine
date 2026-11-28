@@ -39,12 +39,17 @@ namespace renegade::bridge
         std::string error;
     };
 
+    [[nodiscard]] bool ValidateScreenVideoFile(const std::string& path,std::string& error);
+
     [[nodiscard]] bool PrepareVideoAsset(
         const std::string& projectRoot,
         const StableId& projectId,
         const StableId& videoAssetId,
         PreparedVideoAsset& prepared,
         std::string& error);
+
+    [[nodiscard]] bool PreparePackagedVideo(const std::string& root,const StableId& project,
+        const StableId& id,PreparedVideoAsset& prepared,std::string& error);
 
     [[nodiscard]] wi::Resource LoadPreparedVideoAsset(
         const PreparedVideoAsset& prepared,

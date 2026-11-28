@@ -23,10 +23,14 @@ namespace renegade::studio
                 {"health.current","Health / current",false,false},
                 {"health.maximum","Health / maximum",false,false},
                 {"alive","Alive",true,false},
+                {"ammo.available","Ammo / available for equipped firearm",true,false},
                 {"ammo.loaded","Ammo / loaded",false,false},
                 {"ammo.capacity","Ammo / capacity",false,false},
                 {"ammo.reserve","Ammo / reserve",false,true},
-                {"ammo.reloading","Ammo / reloading",true,true},
+                {"ammo.reloading","Ammo / reloading",true,false},
+                {"equipment.name","Equipment / weapon name",false,false,true},
+                {"equipment.slot","Equipment / active slot (1-9)",false,false},
+                {"equipment.slots","Equipment / loadout list",false,false,true},
                 {"equipment.equipped","Equipment / equipped",true,false}};
             return values;
         }

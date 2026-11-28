@@ -2,6 +2,7 @@
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
 #include "renegade/bridge/AudioService.h"
+#include "PcmWaveImport.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -9,18 +10,24 @@
 namespace renegade::bridge
 {
 namespace fs = std::filesystem;
-bool ImportDialogueVoice(const std::string &root, const std::string &source, std::string &relative, std::string &error)
+static bool ImportProjectAudio(const std::string &root, const std::string &source, const char* folder, std::string &relative, std::string &error)
 {
     relative.clear();
     error.clear();
-    if (source.empty() || !ValidateAudioAssetForWicked(source, error)) return false;
+    if(source.empty())return false;
+    std::vector<std::uint8_t> normalised;
+    if(!ValidateAudioAssetForWicked(source,error))
+    {
+        if(std::string(folder)!="Content/Audio/UI/"||!detail::NormaliseUiPcmWave(source,normalised))return false;
+        error.clear();
+    }
     std::error_code ec;
     const auto base = fs::weakly_canonical(fs::u8path(root), ec);
     if (ec || root.empty()) { error = "Open a project before importing a voice clip."; return false; }
     const auto file = fs::canonical(fs::u8path(source), ec);
     if (ec) { error = "Could not read the selected voice clip."; return false; }
     const auto existing = file.lexically_relative(base).generic_u8string();
-    if (existing.rfind("Content/Audio/", 0) == 0 && IsDialogueVoicePath(existing))
+    if (normalised.empty() && existing.rfind("Content/Audio/", 0) == 0 && IsDialogueVoicePath(existing))
     {
         relative = existing;
         return true;
@@ -32,13 +39,19 @@ bool ImportDialogueVoice(const std::string &root, const std::string &source, std
     stem.resize(std::min(size_t(60), stem.size()));
     auto extension = file.extension().u8string();
     std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return char(std::tolower(c)); });
-    const auto path = "Content/Audio/Dialogue/" + stem + "-" + GenerateStableId() + extension;
+    const auto path = std::string(folder) == "Content/Audio/UI/" ?
+        std::string(folder) + GenerateStableId() + "/" + file.filename().u8string() :
+        std::string(folder) + stem + "-" + GenerateStableId() + extension;
     std::ifstream in(file, std::ios::binary);
     ProjectDocumentWrite write;
     write.destinationPath = (base / fs::u8path(path)).generic_u8string();
-    write.content.resize(size_t(size));
-    if (!in.read(reinterpret_cast<char *>(write.content.data()), std::streamsize(size)))
-    { error = "Could not read the complete voice clip."; return false; }
+    if(!normalised.empty())write.content=std::move(normalised);
+    else
+    {
+        write.content.resize(size_t(size));
+        if (!in.read(reinterpret_cast<char *>(write.content.data()), std::streamsize(size)))
+        { error = "Could not read the complete voice clip."; return false; }
+    }
     ProjectDocumentTransactionOptions options;
     options.allowedRoot = root;
     options.journalDirectory = (base / "Saved/Transactions").generic_u8string();
@@ -46,6 +59,14 @@ bool ImportDialogueVoice(const std::string &root, const std::string &source, std
     if (!result.success) { error = result.message; return false; }
     relative = path;
     return true;
+}
+bool ImportDialogueVoice(const std::string& root,const std::string& source,std::string& relative,std::string& error)
+{
+    return ImportProjectAudio(root,source,"Content/Audio/Dialogue/",relative,error);
+}
+bool ImportUiClickSound(const std::string& root,const std::string& source,std::string& relative,std::string& error)
+{
+    return ImportProjectAudio(root,source,"Content/Audio/UI/",relative,error);
 }
 bool ResolveDialogueVoicePath(const std::string &root, const std::string &relative, std::string &absolute, std::string &error)
 {

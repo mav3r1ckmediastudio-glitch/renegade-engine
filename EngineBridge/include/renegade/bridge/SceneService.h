@@ -13,6 +13,7 @@
 namespace renegade::bridge
 {
     class SceneDocumentService;
+    class PreparedSceneOpen;
     class TerrainPropCollisionWorld;
 
     enum class SceneEntityCategory
@@ -120,6 +121,7 @@ namespace renegade::bridge
         // SceneDocumentService so selection/history are committed with it.
         void EnableCoarseTerrainPropModels(bool enabled) { coarseTerrainPropModels_ = enabled; }
         bool LoadScene(const std::string& filePath);
+        bool LoadPreparedScene(PreparedSceneOpen&& prepared);
 
         [[nodiscard]] wi::scene::Scene& GetScene() noexcept;
         [[nodiscard]] const wi::scene::Scene& GetScene() const noexcept;

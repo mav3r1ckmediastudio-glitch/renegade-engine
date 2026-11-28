@@ -1,6 +1,13 @@
+#include "renegade/bridge/ZoneService.h"
+#include "renegade/bridge/WorldNavigationService.h"
+#include "RuntimeScreenCamera.h"
+#include "renegade/bridge/FlowService.h"
+#include "renegade/bridge/ScreenBackgroundPanel.h"
+#include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/ParticleEffectRuntimeService.h"
 #include <type_traits>
 #include "RuntimeScriptRuntime.h"
+#include "renegade/bridge/ScreenClickSound.h"
 #include "RuntimeScriptEntityApi.h"
 #include "InventoryLuaBridge.h"
 #include "renegade/bridge/DialogueService.h"
@@ -201,6 +208,8 @@ namespace renegade::runtime
             std::unique_ptr<InventoryLuaContext> inventoryLua;
         };
 
+        bridge::WorldNavigationService navigation;
+        bridge::WorldLocationService locations;
         std::unique_ptr<bridge::ParticleEffectRuntimeService> particles;
         lua_State* lua = nullptr;
         MemoryBudget memory;
@@ -221,6 +230,11 @@ namespace renegade::runtime
         std::function<bridge::InventoryGameplayGateway*(
             const bridge::StableId&, const bridge::StableId&)> inventoryGatewayProvider;
         RuntimeDialogueScriptApi dialogueApi;
+        bridge::HurtFeedbackService hurtFeedback;
+        std::function<bool(float,std::optional<float>,std::string&)> hurtPulse;std::function<void()> hurtClear;
+        std::function<bool(bool,std::string&)> worldMapSet;
+        std::function<bool()> worldMapGet;
+        std::function<bridge::PlayerWeaponAmmo()> weaponAmmoProvider;
         std::uint64_t dispatchedEventCount = 0;
         std::uint64_t eventDeliveryAttemptCount = 0;
         std::uint64_t lastEventSequence = 0;
@@ -837,6 +851,9 @@ namespace renegade::runtime
 
 
         #include "RuntimeParticleLua.inl"
+        #include "RuntimeNavigationLua.inl"
+        #include "RuntimeHurtLua.inl"
+        #include "RuntimeLocationLua.inl"
 
         bool IsScriptedFlightPilot(lua_State* state)
         {
@@ -904,6 +921,173 @@ namespace renegade::runtime
                 return PushFalseError(state, "The entity has no intact destructible collider.");
             lua_pushboolean(state, 1);
             return 1;
+        }
+
+        // ui.screen_media(screen path, widget ID [, table or "authored"]).
+        static int UiScreenMediaLua(lua_State* state)
+        {
+            auto* self=FromUpvalue(state);
+            if (!self || self->projectRoot.empty()) return PushNilError(state,"No active project.");
+            std::string path,error;
+            bridge::DocumentEnvelope envelope;
+            bridge::ScreenDocument doc;
+            if (!bridge::ResolveScreenResourcePath(self->projectRoot,luaL_checkstring(state,1),path,error) ||
+                !bridge::ReadDocumentEnvelope(path,envelope,error) ||
+                !bridge::ReadScreenDocument(path,envelope.projectId,doc,error)) return PushNilError(state,error);
+            const std::string id=luaL_checkstring(state,2);
+            auto it=std::find_if(doc.widgets.begin(),doc.widgets.end(),[&](const auto& w){return w.id==id;});
+            if (it==doc.widgets.end() || (!it->video && it->kind!=bridge::ScreenWidgetKind::Text))
+                return PushNilError(state,"Choose a Video or Text element.");
+            auto& changes=ScreenMediaOverrides()[{envelope.projectId,doc.envelope.documentId}];
+            auto found=changes.find(id);
+            ScreenMediaOverride value;
+            if (found!=changes.end()) value=found->second;
+            if (value.authored) {value.video=it->video;value.hints=it->hintListPath;}
+            if (lua_gettop(state)>2)
+            {
+                if (lua_type(state,3)==LUA_TSTRING && std::string(lua_tostring(state,3))=="authored")
+                {value.authored=true;value.video=it->video;value.hints=it->hintListPath;}
+                else
+                {
+                    luaL_checktype(state,3,LUA_TTABLE);
+                    value.authored=false;
+                    if (value.video)
+                    {
+                        lua_getfield(state,3,"asset");
+                        if (!lua_isnil(state,-1))
+                        {
+                            std::string asset=luaL_checkstring(state,-1);
+                            if (!bridge::IsValidStableId(asset)) return PushNilError(state,"Invalid video asset ID.");
+                            value.video->assetId=asset;
+                        }
+                        lua_pop(state,1);
+                        lua_getfield(state,3,"transparency");
+                        if (!lua_isnil(state,-1))
+                        {
+                            const std::string mode=luaL_checkstring(state,-1);
+                            if (mode=="auto") value.video->transparency=bridge::VideoTransparency::Auto;
+                            else if (mode=="opaque") value.video->transparency=bridge::VideoTransparency::Opaque;
+                            else if (mode=="remove_black") value.video->transparency=bridge::VideoTransparency::RemoveBlack;
+                            else if (mode=="soft_smoke") value.video->transparency=bridge::VideoTransparency::SoftSmoke;
+                            else return PushNilError(state,"Unknown video transparency mode.");
+                        }
+                        lua_pop(state,1);
+                        for (auto [key,field]:{std::pair<const char*,bool*>{"loop",&value.video->loop},
+                            {"mute",&value.video->mute},{"additive",&value.video->additive}})
+                        {
+                            lua_getfield(state,3,key);
+                            if (!lua_isnil(state,-1)) {
+                                if (!lua_isboolean(state,-1)) return PushNilError(state,"Video switches require booleans.");
+                                *field=lua_toboolean(state,-1)!=0;
+                            }
+                            lua_pop(state,1);
+                        }
+                    }
+                    else
+                    {
+                        lua_getfield(state,3,"hints");value.hints=luaL_checkstring(state,-1);lua_pop(state,1);
+                        if (!bridge::ResolveScreenResourcePath(self->projectRoot,value.hints,path,error) ||
+                            std::filesystem::u8path(path).extension()!=".txt") return PushNilError(state,"Choose a project text file.");
+                    }
+                }
+                ++value.revision;changes[id]=value;
+            }
+            lua_newtable(state);
+            if (value.video)
+            {
+                lua_pushstring(state,value.video->assetId.c_str());lua_setfield(state,-2,"asset");
+                lua_pushboolean(state,value.video->mute);lua_setfield(state,-2,"mute");
+                lua_pushboolean(state,value.video->loop);lua_setfield(state,-2,"loop");
+                lua_pushboolean(state,value.video->additive);lua_setfield(state,-2,"additive");
+                constexpr const char* modes[]={"auto","opaque","remove_black","soft_smoke"};
+                lua_pushstring(state,modes[static_cast<unsigned>(value.video->transparency)]);lua_setfield(state,-2,"transparency");
+            }
+            else {lua_pushstring(state,value.hints.c_str());lua_setfield(state,-2,"hints");}
+            return 1;
+        }
+
+        static int UiBackgroundCameraLua(lua_State* state)
+        {
+            auto* self=FromUpvalue(state);
+            if(!self || self->projectRoot.empty())return PushNilError(state,"No active project.");
+            const std::string hint=luaL_checkstring(state,1);
+            std::string path,error;
+            bridge::DocumentEnvelope envelope;
+            bridge::ScreenDocument doc;
+            if(!bridge::ResolveScreenResourcePath(self->projectRoot,hint,path,error) ||
+                !bridge::ReadDocumentEnvelope(path,envelope,error) ||
+                !bridge::ReadScreenDocument(path,envelope.projectId,doc,error))return PushNilError(state,error);
+            const auto widget=std::find_if(doc.widgets.begin(),doc.widgets.end(),
+                [&](const auto& w){return bridge::IsScreenBackground(doc,w);});
+            if(widget==doc.widgets.end())return PushNilError(state,"Screen has no background panel.");
+            auto& setting=ScreenCameraOverrides()[{doc.envelope.projectId,doc.envelope.documentId}];
+            if(lua_gettop(state)>=2)
+            {
+                const std::string mode=luaL_checkstring(state,2);
+                auto source=setting.authored ? widget->cameraSource : setting.source;
+                if(mode=="image" || mode=="authored")source.reset();
+                else if(mode=="fixed" || mode=="pan")
+                {
+                    if(lua_gettop(state)>2)
+                    {
+                        const std::string level=luaL_checkstring(state,3),camera=luaL_checkstring(state,4);
+                        std::string scenePath;
+                        bridge::DocumentEnvelope sceneEnvelope;
+                        if(!bridge::ResolveScreenResourcePath(self->projectRoot,level,scenePath,error) ||
+                            !bridge::ReadDocumentEnvelope(scenePath+".rmeta",sceneEnvelope,error) ||
+                            !bridge::ResolveSceneDocumentPath(self->projectRoot,doc.envelope.projectId,
+                                sceneEnvelope.documentId,level,scenePath,error)) return PushNilError(state,error);
+                        const auto prepared=bridge::PrepareWickedSceneOpen(scenePath);
+                        if(!prepared.IsReady())return PushNilError(state,prepared.Error());
+                        const auto& scene=*prepared.ReadOnlyScene();
+                        bridge::EntityIdentityIndex index;
+                        if(!index.Build(scene,error))return PushNilError(state,error);
+                        const auto entity=index.Resolve(camera);
+                        if(!scene.cameras.Contains(entity))return PushNilError(state,"Camera ID missing from level.");
+                        const auto* name=scene.names.GetComponent(entity);
+                        source=bridge::ScreenCameraSource{sceneEnvelope.documentId,level,camera,name?name->name:"Camera",false};
+                    }
+                    if(!source)return PushNilError(state,"Supply a level path and a saved camera ID.");
+                    source->slowPan=mode=="pan";
+                }
+                else return PushNilError(state,"Expected image, fixed, pan or authored.");
+                setting.authored=mode=="authored";
+                setting.source=std::move(source);
+                ++setting.revision;
+            }
+            const auto& source=setting.authored ? widget->cameraSource : setting.source;
+            lua_pushstring(state,source ? (source->slowPan?"pan":"fixed") : (setting.authored && widget->video ? "video" : "image"));
+            lua_pushstring(state,source ? source->levelPathHint.c_str() : "");
+            lua_pushstring(state,source ? source->cameraId.c_str() : "");
+            return 3;
+        }
+
+        static int UiClickSoundLua(lua_State* state)
+        {
+            auto* self=FromUpvalue(state);
+            if(!self || self->projectRoot.empty()) return luaL_error(state,"No active project");
+            const bridge::ScreenClickSounds::Key key={luaL_checkstring(state,1),luaL_checkstring(state,2)};
+            auto& sounds=bridge::ProjectClickSounds(self->projectRoot);
+            if(lua_gettop(state)>2)
+            {
+                const std::string mode=luaL_checkstring(state,3);
+                if(mode=="default") sounds.buttons.erase(key);
+                else if(mode=="silent") sounds.buttons[key]="";
+                else if(mode=="local")
+                {
+                    const std::string path=luaL_checkstring(state,4);
+                    std::string absolute,error;
+                    if(!bridge::ResolveScreenResourcePath(self->projectRoot,path,absolute,error) ||
+                        !bridge::ValidateAudioAssetForWicked(absolute,error))
+                        return luaL_error(state,"%s",error.c_str());
+                    sounds.buttons[key]=path;
+                }
+                else return luaL_error(state,"Expected default, local or silent");
+            }
+            const auto it=sounds.buttons.find(key);
+            lua_pushstring(state,sounds.Resolve(key).c_str());
+            lua_pushstring(state,it==sounds.buttons.end() ? "default" : it->second.empty() ? "silent" : "local");
+            return 2;
         }
 
         static int LightGetStateLua(lua_State* state) {
@@ -1139,6 +1323,24 @@ namespace renegade::runtime
             return 1;
         }
 
+        static int PlayerWeaponAmmoLua(lua_State* state)
+        {
+            auto* owner=FromUpvalue(state);
+            if(lua_gettop(state)!=0)return luaL_error(state,"player.weapon_ammo expects no arguments");
+            const auto ammo=owner&&owner->weaponAmmoProvider?owner->weaponAmmoProvider():bridge::PlayerWeaponAmmo{};
+            lua_newtable(state);
+            lua_pushboolean(state,ammo.available);lua_setfield(state,-2,"available");
+            lua_pushboolean(state,ammo.equipped);lua_setfield(state,-2,"equipped");
+            if(ammo.slot){lua_pushinteger(state,ammo.slot);lua_setfield(state,-2,"slot");}
+            if(!ammo.name.empty()){lua_pushlstring(state,ammo.name.data(),ammo.name.size());lua_setfield(state,-2,"name");}
+            if(ammo.available){
+                lua_pushinteger(state,ammo.loaded);lua_setfield(state,-2,"loaded");
+                lua_pushinteger(state,ammo.capacity);lua_setfield(state,-2,"capacity");
+                lua_pushboolean(state,ammo.reloading);lua_setfield(state,-2,"reloading");
+            }
+            return 1;
+        }
+
         static int PlayerGetPositionLua(lua_State* state)
         {
             auto* owner = FromUpvalue(state);
@@ -1251,6 +1453,7 @@ namespace renegade::runtime
                 return frame.player.sprintDown ? 1.0f : 0.0f;
             case bridge::GameplayAction::Interact:
                 return frame.interactPressed ? 1.0f : 0.0f;
+            case bridge::GameplayAction::Map: return frame.mapPressed?1.f:0.f;
             case bridge::GameplayAction::Pause:
                 return frame.pausePressed ? 1.0f : 0.0f;
             case bridge::GameplayAction::Reset:
@@ -1320,6 +1523,8 @@ namespace renegade::runtime
             case bridge::GameplayAction::Interact:
                 pressed = owner->gameplayInput->interactPressed;
                 break;
+            case bridge::GameplayAction::Map:
+                pressed=owner->gameplayInput->mapPressed;break;
             case bridge::GameplayAction::Pause:
                 pressed = owner->gameplayInput->pausePressed;
                 break;
@@ -1618,6 +1823,7 @@ namespace renegade::runtime
             lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,LightSetStateLua,1);lua_setfield(lua,-2,"set_state");
             lua_setfield(lua,-2,"light");
             RegisterParticleLua();
+            RegisterNavigationLua();RegisterLocationLua();RegisterMinimapLua();RegisterWorldMapLua();RegisterHurtLua();
 
             lua_newtable(lua);
             lua_pushlightuserdata(lua, this);
@@ -1649,6 +1855,7 @@ namespace renegade::runtime
             lua_pushlightuserdata(lua, this);
             lua_pushcclosure(lua, PlayerGetPitchLua, 1);
             lua_setfield(lua, -2, "get_pitch");
+            lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,PlayerWeaponAmmoLua,1);lua_setfield(lua,-2,"weapon_ammo");
             lua_setfield(lua, -2, "player");
 
             lua_newtable(lua);
@@ -1671,6 +1878,9 @@ namespace renegade::runtime
             lua_pushlightuserdata(lua, this);
             lua_pushcclosure(lua, UiShowPromptLua, 1);
             lua_setfield(lua, -2, "show_prompt");
+            lua_pushlightuserdata(lua,this); lua_pushcclosure(lua,UiScreenMediaLua,1); lua_setfield(lua,-2,"screen_media");
+            lua_pushlightuserdata(lua,this); lua_pushcclosure(lua,UiBackgroundCameraLua,1); lua_setfield(lua,-2,"background_camera");
+            lua_pushlightuserdata(lua,this); lua_pushcclosure(lua,UiClickSoundLua,1); lua_setfield(lua,-2,"button_click_sound");
             lua_setfield(lua, -2, "ui");
 
             lua_newtable(lua);
@@ -2329,6 +2539,23 @@ namespace renegade::runtime
                 projectRoot.clear();
                 return false;
             }
+            // Native locations must exist before entity and Level on_start callbacks.
+            // One metadata pass at scene start; subsequent updates use cached contacts.
+            for (size_t i=0;i<activeScene.metadatas.GetCount();++i)
+            {
+                const auto entity=activeScene.metadatas.GetEntity(i);
+                bridge::zones::Definition zone;
+                const auto* transform=activeScene.transforms.GetComponent(entity);
+                if (!transform || !bridge::zones::Read(activeScene,entity,zone) ||
+                    zone.behaviour!=bridge::zones::Behaviour::Location) continue;
+                const auto* name=activeScene.names.GetComponent(entity);
+                const auto position=transform->GetPosition();
+                bridge::WorldLocation location{bridge::PersistentEntityId(activeScene,entity),
+                    name?name->name:"Location",{position.x,position.y,position.z},zone.location};
+                if (!locations.SyncNative(std::move(location),error)) {
+                    locations.Reset();scene=nullptr;projectRoot.clear();return false;
+                }
+            }
             running = true;
             paused = false;
             error.clear();
@@ -2400,6 +2627,7 @@ namespace renegade::runtime
 
         void StopScene() noexcept
         {
+
             entityOwnersBySource.clear();
             weatherTransition = bridge::WeatherTransitionController{};
             weatherTargetPreset.clear();
@@ -2415,6 +2643,7 @@ namespace renegade::runtime
                 projectRoot.clear();
                 running = false;
                 paused = false;
+                navigation.Reset();hurtFeedback.Reset();locations.Reset();
                 return;
             }
             if (running)
@@ -2439,6 +2668,7 @@ namespace renegade::runtime
                 ++generation;
             running = false;
             paused = false;
+            navigation.Reset();hurtFeedback.Reset();locations.Reset();
         }
 
         void Shutdown() noexcept
@@ -2565,6 +2795,9 @@ namespace renegade::runtime
             error);
     }
 
+    void RuntimeScriptRuntime::SetWeaponAmmoProvider(std::function<bridge::PlayerWeaponAmmo()> provider)
+    { impl_->weaponAmmoProvider=std::move(provider); }
+
     void RuntimeScriptRuntime::SetGameplayState(
         const bridge::RuntimePlayerState* player,
         const bridge::GameplayInputFrame* input) noexcept
@@ -2588,6 +2821,9 @@ namespace renegade::runtime
         if (impl_ && !impl_->running)
             impl_->inventoryGatewayProvider = std::move(provider);
     }
+
+    void RuntimeScriptRuntime::SetWorldMapApi(std::function<bool(bool,std::string&)> set,std::function<bool()> get)
+    {impl_->worldMapSet=std::move(set);impl_->worldMapGet=std::move(get);}
 
     void RuntimeScriptRuntime::SetDialogueApi(RuntimeDialogueScriptApi api)
     {
@@ -2805,3 +3041,26 @@ namespace renegade::runtime
         return impl_->diagnostics;
     }
 }
+
+namespace renegade::runtime
+{
+    bridge::WorldNavigationService& RuntimeScriptRuntime::Navigation(){return impl_->navigation;}
+    void RuntimeScriptRuntime::ResolveNavigationEntities()
+    {
+        impl_->navigation.ResolveEntities([this](const std::string& id)->std::optional<bridge::NavigationPoint>{
+            if(!impl_->scene)return {};
+            RuntimeScriptEntityApi api(*impl_->scene,impl_->entitiesById,impl_->generation);XMFLOAT3 p;std::string error;
+            if(!api.GetWorldPosition({id,impl_->generation},p,error))return {};
+            return bridge::NavigationPoint{p.x,p.y,p.z};
+        });
+    }
+}
+
+namespace renegade::runtime
+{
+    bridge::WorldLocationService& RuntimeScriptRuntime::Locations(){return impl_->locations;}
+}
+
+namespace renegade::runtime {bridge::HurtFeedbackService& RuntimeScriptRuntime::HurtFeedback(){return impl_->hurtFeedback;}}
+
+namespace renegade::runtime {void RuntimeScriptRuntime::SetHurtFeedbackApi(std::function<bool(float,std::optional<float>,std::string&)> hit,std::function<void()> clear){impl_->hurtPulse=std::move(hit);impl_->hurtClear=std::move(clear);}}

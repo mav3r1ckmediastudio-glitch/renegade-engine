@@ -1,3 +1,4 @@
+#include <set>
 #include <unordered_set>
 #include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include "renegade/bridge/ParticleEffectService.h"
@@ -157,6 +158,7 @@ namespace renegade::runtime
 
     void RuntimeRenderPath::Update(const float dt)
     {
+        RestoreHurtCamera();
         // Story Flow can replace the active WISCENE without recreating this
         // render path. SceneService exposes that lifecycle explicitly, so a
         // normal frame performs only an O(1) revision check and never repeats
@@ -231,7 +233,8 @@ namespace renegade::runtime
             ThunderAudio().Update(paused_ ? 0.0f : dt, camera->Eye, camera->At);
         if(scene)RecordWeatherDiagnostic(*scene,dt);
         const auto nativeBegin=std::chrono::steady_clock::now();
-        {auto riverBindings=riverFlow_.Bind();bridge::UpdateParticleEffectSprites(*scene,paused_?0.0f:dt);RenderPath3D::Update(dt);}
+        {auto riverBindings=riverFlow_.Bind();bridge::UpdateParticleEffectSprites(*scene,paused_?0.0f:dt);
+            RenderPath3D::Update(dt);}
         if(const char* trace=std::getenv("RENEGADE_G13E14_STAGE_TRACE")){
             static std::uint64_t frame=0;
             if(++frame<=20 || frame%10==0){
@@ -301,6 +304,15 @@ namespace renegade::runtime
     void RuntimeRenderPath::PreRender()
     {
         if (!SceneReadyForRender()) return;
+        // The player/vehicle camera is sampled after the scene's physics step.
+        // Add presentation shake only now, after aiming/gameplay has finished,
+        // and before visibility and render constants consume the final camera.
+        RestoreHurtCamera();
+        if(!paused_&&camera&&(hurtShake_.x!=0||hurtShake_.y!=0)){
+            hurtCameraPose_=camera->InvView;auto pose=camera->GetInvView();
+            pose.r[3]+=XMVector3TransformNormal(XMVectorSet(hurtShake_.x,hurtShake_.y,0,0),pose);
+            camera->TransformCamera(pose);camera->UpdateCamera();hurtCameraApplied_=true;
+        }
         riverUnderwater_.Update(*this);
         auto riverBindings=riverFlow_.Bind();
         wi::RenderPath3D::PreRender();
@@ -604,7 +616,7 @@ namespace renegade::runtime
     {
         propModels_.FinishPreparations();
         dialogue_.Close(renderer_);
-        hudSession_.Reset(renderer_);
+        hudSession_.Reset(renderer_);locationOverlay_.Reset(renderer_);
         diagnosticService_.StopLocalEndpoint();
         StopCreatorScripts();
         playerEquipment_ = {};
@@ -815,8 +827,10 @@ namespace renegade::runtime
 
     void RuntimeApplication::Update(const float dt)
     {
+        if (pendingLevelLoad_) { UpdateLoadingScreen(dt); return; }
         if (directLevelWon_ && wi::input::Press(wi::input::KEYBOARD_BUTTON_ENTER))
             quitRequested_ = true;
+        renderer_.RestoreHurtCamera();
         SyncPlayerForScene();
         static RuntimeVehicleTrial vehicleTrial;
         vehicleTrial.RestoreCockpitProjection(renderer_.camera);
@@ -845,7 +859,7 @@ namespace renegade::runtime
 
         const bool typingInOtherUi=renderer_.GetGUI().IsTyping();
         const bool gameplayInputAllowed =
-            !uiComposition_.Resolve().gameplayInputBlocked && !typingInOtherUi && !dialogue_.Active() && collisionReady;
+            !worldMapOpen_ && !uiComposition_.Resolve().gameplayInputBlocked && !typingInOtherUi && !dialogue_.Active() && collisionReady;
         const bool gameplayFrame = !scenes_.CurrentPath().empty();
         // G13E14 one-level verification uses the exact regular controller and
         // Jolt/scene movement path; synthetic input is gated to the developer
@@ -861,13 +875,19 @@ namespace renegade::runtime
         const bool inventoryInteractionAllowed = InventoryInteractHasFocus(
             gameplayFrame,inventoryOverlayOpen_,
             inventoryScreenPresenter_->IsLoaded(),paused_,typingInOtherUi);
+        if(worldMapOpen_&&worldMapCloseRequested_){std::string error;SetWorldMapOpen(false,error);}
         if (gameplayFrame)
         {
+            const auto mapInput=bridge::CaptureGameplayInput(inputMap_,dt);
+            if(!typingInOtherUi&&((worldMapOpen_&&(mapInput.mapPressed||mapInput.pausePressed))||
+                (!worldMapOpen_&&!inventoryOverlayOpen_&&gameplayInputAllowed&&!paused_&&mapInput.mapPressed))){
+                std::string error;if(!SetWorldMapOpen(!worldMapOpen_,error))wi::backlog::post("World map: "+error,wi::backlog::LogLevel::Warning);
+            }
             // Feed current input into the one authoritative Player before
             // Wicked advances physics. The View Rig is parented to that Player,
             // so the normal physics -> hierarchy -> object update carries the
             // first-person presentation to the same post-physics position.
-            gameplayInput_ = (gameplayInputAllowed || inventoryInteractionAllowed)
+            gameplayInput_ = (!worldMapOpen_&&(gameplayInputAllowed || inventoryInteractionAllowed))
                 ? bridge::CaptureGameplayInput(inputMap_, dt) : bridge::GameplayInputFrame{};
             if(gameplayInputAllowed && !paused_ && playerViewAnimation_.initialized)
                 for(size_t i=0;i<weaponSlots_.size();++i)if(wi::input::Press(static_cast<wi::input::BUTTON>('1'+i)))SelectWeaponSlot(i);
@@ -1152,6 +1172,8 @@ namespace renegade::runtime
         }
         const auto bindingStart=std::chrono::steady_clock::now();
         UpdateUiBindings();
+        UpdateWorldNavigation(dt);
+        UpdateHurtFeedback(dt);
         if(screenPresenter_->IsLoaded()||hudSession_.IsLoaded())
         {
             const auto elapsed=std::chrono::duration_cast<std::chrono::microseconds>(
@@ -1459,7 +1481,7 @@ namespace renegade::runtime
         if(hudExitRequested_&&!hudSession_.Presenter()->ExitComplete())return;
         if(!pending.destination)
         {
-            hudSession_.Reset(renderer_);uiComposition_.ClearHud();
+            hudSession_.Reset(renderer_);locationOverlay_.Reset(renderer_);uiComposition_.ClearHud();
             hudExitRequested_=false;hudAppliedSelectionRevision_=revision;pendingHudSwitch_.reset();
             hudFailedRevision_.reset();hudTransitionError_.clear();
             pendingHudActions_.clear();RefreshUiComposition();RefreshUiBindingSources();return;
@@ -1567,6 +1589,112 @@ namespace renegade::runtime
         attributeDiagnostic_.clear();
     }
 
+    void RuntimeApplication::UpdateWorldNavigation(float dt)
+    {
+        std::string error;
+        auto& navigation=creatorScripts_.Navigation();
+        std::set<bridge::StableId> activeNavigationViews;
+        const auto collectNavigation=[&](const RuntimeScreenController& controller){for(const auto& w:controller.AuthoredDocument().widgets)if(w.navigation)activeNavigationViews.insert(w.id);};
+        if(screenPresenter_->IsLoaded())collectNavigation(*screenController_);
+        if(hudSession_.IsLoaded())collectNavigation(*hudSession_.Controller());
+        if(worldMapOverlay_.IsLoaded())collectNavigation(*worldMapOverlay_.Controller());
+        navigation.RetainAuthoredViews(activeNavigationViews);
+        bridge::NavigationObserver navCamera,navPlayer;
+        if(renderer_.camera)
+        {
+            const auto& eye=renderer_.camera->Eye;const auto& at=renderer_.camera->At;
+            navCamera={true,{eye.x,eye.y,eye.z},float(std::atan2(at.x,at.z)*180/3.141592653589793)};
+        }
+        if(player_.IsSpawned())
+            if(const auto* transform=scenes_.GetScene().transforms.GetComponent(player_.entity))
+            {const auto p=transform->GetPosition();navPlayer={true,{p.x,p.y,p.z},float(player_.yaw*180/3.141592653589793)};}
+        navigation.SetObservers(navCamera,navPlayer);
+        auto& locations=creatorScripts_.Locations();
+        for(const auto& [id,visit]:locations.All()){
+            const auto key="location:"+id;const auto& l=visit.location;
+            if(l.profile.showOnCompass&&(!l.profile.onlyAfterDiscovery||visit.discovered)){
+                bridge::NavigationTarget target{key,l.name,l.profile.type,"",l.position,0,true};target.icon=l.profile.icon;
+                navigation.PutTarget(std::move(target),error);
+            }else if(navigation.Target(key))navigation.RemoveTarget(key,error);
+        }
+        std::vector<std::string> retiredLocations;
+        for(const auto& target:navigation.Snapshot().targets)if(target.id.rfind("location:",0)==0&&!locations.Get(target.id.substr(9)))retiredLocations.push_back(target.id);
+        for(const auto& id:retiredLocations)navigation.RemoveTarget(id,error);
+
+        // Character records are already owned/indexed by the gameplay system.
+        // Read transforms directly; no scene-wide discovery or marker entity scan.
+        struct ActorMarker {const RuntimeCharacterRecord* actor;bridge::NavigationPoint position;float distance;};
+        std::vector<ActorMarker> candidates;
+        const bool wantEnemies=std::any_of(navigation.Snapshot().views.begin(),navigation.Snapshot().views.end(),[](const auto& item){
+            const auto& w=item.second.widget;return w.visible&&w.navigation&&w.navigation->minimap&&w.navigation->minimap->showEnemies;});
+        if(navPlayer.available&&wantEnemies)for(const auto& actor:characterAiState_.characters){
+            const auto* body=scenes_.GetScene().characters.GetComponent(actor.entity);
+            const auto* pose=scenes_.GetScene().transforms.GetComponent(actor.entity);
+            const auto* combat=FindCharacterCombat(combatState_,actor.stableEntityId);
+            if(!body||!pose||(combat&&combat->dead)||bridge::DefaultFactionRelationship("Player",actor.authoring.factionId)!=bridge::FactionRelationship::Hostile)continue;
+            const auto p=pose->GetPosition();const float distance=std::hypot(p.x-navPlayer.position.x,p.z-navPlayer.position.z);
+            if(std::isfinite(distance))candidates.push_back({&actor,{p.x,p.y,p.z},distance});
+        }
+        const size_t count=std::min<size_t>(128,candidates.size());
+        std::partial_sort(candidates.begin(),candidates.begin()+count,candidates.end(),[](const auto& a,const auto& b){
+            if(a.distance!=b.distance)return a.distance<b.distance;return a.actor->stableEntityId<b.actor->stableEntityId;});
+        std::set<std::string> activeActors;
+        for(size_t i=0;i<count;++i){const auto& actor=*candidates[i].actor;const auto key="actor:"+actor.stableEntityId;
+            const auto* name=scenes_.GetScene().names.GetComponent(actor.entity);
+            bridge::NavigationTarget t{key,name?name->name.substr(0,160):"Enemy","enemy","",candidates[i].position,5,true};t.minimapOnly=true;
+            if(navigation.PutTarget(std::move(t),error))activeActors.insert(key);
+        }
+        for(const auto& old:actorNavigationTargets_)if(!activeActors.count(old)&&navigation.Target(old))navigation.RemoveTarget(old,error);
+        actorNavigationTargets_=std::move(activeActors);
+        creatorScripts_.ResolveNavigationEntities();
+        const auto apply=[&](RuntimeScreenController& controller,RuntimeScreenPresenter& presenter)
+        {
+            presenter.SetMinimapTextureProvider([this](const bridge::StableId& id){return minimapCameras_.Texture(scenes_.GetScene(),id);});
+            bridge::ScreenDocument navigationPrototypes;
+            for(const auto& w:controller.AuthoredDocument().widgets)if(w.navigation&&!navigation.View(w.id))
+            {
+                const auto* prototype=presenter.NavigationPrototype(w.id);
+                auto copy=prototype?*prototype:w;copy.visible=w.visible;copy.enabled=w.enabled;
+                navigationPrototypes.widgets.push_back(std::move(copy));
+            }
+            if(!navigation.ObserveDocument(navigationPrototypes,error)||
+                !presenter.SetNavigationState(navigation.Snapshot(),controller.AuthoredDocument().usage==bridge::ScreenUsage::Hud && &controller!=worldMapOverlay_.Controller(),error))
+            {return false;}
+            return true;
+        };
+        if(hudSession_.IsLoaded()){
+            if(locationOverlay_.IsLoaded())locationOverlay_.Reset(renderer_);
+            hudSession_.Presenter()->SetLocationAnnouncement(locations.Announcement());
+        }else{
+            const auto* node=flowStarted_?flow_.CurrentNode():nullptr;
+            const bool gameplay=(!node||node->kind==bridge::FlowNodeKind::Level)&&!paused_&&!scenes_.CurrentPath().empty();
+            const auto frame=gameplay?locations.Announcement():std::optional<bridge::LocationAnnouncementFrame>{};
+            if(frame&&!locationOverlay_.IsLoaded()){
+                bridge::ScreenDocument doc;doc.usage=bridge::ScreenUsage::Hud;
+                doc.envelope=bridge::CreateDocumentEnvelope(startupResult_.project.projectId,bridge::RuntimeScreenDocumentType,"Content/UI/LocationAnnouncement.renegade-screen","runtime-location-overlay");
+                doc.widgets={bridge::MakeLocationAnnouncementWidget()};
+                locationOverlay_.Load(doc,startupResult_.project.rootPath,renderer_,{},error);
+            }
+            if(locationOverlay_.IsLoaded()){locationOverlay_.SetAnimationPreview({false,false,uiAccessibility_.reducedMotion,0});locationOverlay_.SetLocationAnnouncement(frame);locationOverlay_.ApplyLayout(renderer_);}
+        }
+        if ((screenPresenter_->IsLoaded()&&!apply(*screenController_,*screenPresenter_)) ||
+            (hudSession_.IsLoaded()&&uiComposition_.IsHudVisible()&&!apply(*hudSession_.Controller(),*hudSession_.Presenter())))
+            wi::backlog::post("Renegade Runtime navigation: "+error,wi::backlog::LogLevel::Warning);
+        if(worldMapOverlay_.IsLoaded()){
+            apply(*worldMapOverlay_.Controller(),*worldMapOverlay_.Presenter());
+            worldMapOverlay_.Presenter()->UpdateInput(renderer_,*worldMapOverlay_.Controller(),true,dt);
+        }
+        std::set<bridge::StableId> visible;
+        if(!worldMapOpen_){
+            const auto addVisible=[&](const RuntimeScreenController& controller){for(const auto& w:controller.Document().widgets)
+                if(w.navigation&&w.visible){const auto* view=navigation.View(w.id);if(view&&view->widget.visible)visible.insert(w.id);}};
+            if(screenPresenter_->IsLoaded())addVisible(*screenController_);
+            if(hudSession_.IsLoaded()&&uiComposition_.IsHudVisible())addVisible(*hudSession_.Controller());
+            if(hudSession_.IsLoaded()&&uiComposition_.IsHudVisible())for(const auto& [id,view]:navigation.Snapshot().views)if(!view.authored&&view.widget.visible)visible.insert(id);
+        }
+        minimapCameras_.Update(scenes_.GetScene(),scenes_.Revision(),navigation.Snapshot(),visible);
+    }
+
     void RuntimeApplication::UpdateUiBindings()
     {
         if (uiBindingSources_.empty())
@@ -1596,6 +1724,7 @@ namespace renegade::runtime
         sources.playerView = &playerViewAnimation_;
         if(activeWeaponSlot_<slotNames_.size()){
             sources.weaponName=slotNames_[activeWeaponSlot_];
+            sources.weaponSlot=unsigned(activeWeaponSlot_+1);
             for(size_t i=0;i<slotNames_.size();++i){
                 if(!sources.weaponSlots.empty())sources.weaponSlots+="    ";
                 auto label=std::to_string(i+1)+" "+slotNames_[i];
@@ -2123,6 +2252,7 @@ namespace renegade::runtime
         if (playerSceneRevision_ == scenes_.Revision())
             return;
 
+        combatState_.hurt.Reset();renderer_.SetHurtCameraShake({});
         player_ = {};
         playerViewRig_ = {};
         playerViewAnimation_ = {};
@@ -3604,7 +3734,8 @@ namespace renegade::runtime
         inventoryOverlayCache_={};
         renderer_.SetInventoryOverlay({},false);
         creatorScripts_.SetInventoryGatewayProvider({});
-        creatorScripts_.SetDialogueApi({});
+        creatorScripts_.SetDialogueApi({});creatorScripts_.SetWorldMapApi({},{});
+        creatorScripts_.SetWeaponAmmoProvider({});
         dialogue_.SetLifecycleSink({});
 
         scriptSceneRevision_ = scenes_.Revision();
@@ -3707,6 +3838,17 @@ namespace renegade::runtime
             return creatorScripts_.EnqueueGameplayEvent(std::move(event), error);
         });
         creatorScripts_.SetDialogueApi(dialogue_.ScriptApi(scenes_.GetScene(), renderer_));
+        creatorScripts_.SetHurtFeedbackApi([this](float amount,std::optional<float> bearing,std::string& error){
+            if(!player_.IsSpawned()||combatState_.playerDead){error="No live player for hurt feedback.";return false;}
+            combatState_.hurt.Damage(amount,combatState_.playerMaxHealth,bearing);return true;
+        },[this]{combatState_.hurt.Reset();});
+        creatorScripts_.SetWorldMapApi([this](bool open,std::string& error){return SetWorldMapOpen(open,error);},[this]{return worldMapOpen_;});
+        creatorScripts_.SetWeaponAmmoProvider([this]{
+            if(!player_.IsSpawned())return bridge::PlayerWeaponAmmo{};
+            return CapturePlayerWeaponAmmo(&playerViewAnimation_,
+                activeWeaponSlot_<slotNames_.size()?slotNames_[activeWeaponSlot_]:std::string{},
+                activeWeaponSlot_<weaponSlots_.size()?unsigned(activeWeaponSlot_+1):0);
+        });
         LoadInventoryAuthoredScreen();
         if (!creatorScripts_.StartSceneFromCompanion(
                 startupResult_.startupScenePath,
@@ -3783,6 +3925,9 @@ namespace renegade::runtime
 
     void RuntimeApplication::StopCreatorScripts() noexcept
     {
+        creatorScripts_.SetHurtFeedbackApi({},{});
+        worldMapOverlay_.Reset(renderer_);worldMapOpen_=false;worldMapCloseRequested_=false;
+        minimapCameras_.Reset(scenes_.GetScene());actorNavigationTargets_.clear();
         if (creatorScripts_.IsRunning())
             creatorScripts_.StopScene();
         // Release all live script bindings before destroying inventory authority.
@@ -3792,7 +3937,8 @@ namespace renegade::runtime
         inventoryUiStatus_.clear();
         inventorySession_.Reset();
         creatorScripts_.SetInventoryGatewayProvider({});
-        creatorScripts_.SetDialogueApi({});
+        creatorScripts_.SetDialogueApi({});creatorScripts_.SetWorldMapApi({},{});
+        creatorScripts_.SetWeaponAmmoProvider({});
         dialogue_.SetLifecycleSink({});
         renderer_.SetInteractionPrompt({});
         ReportCreatorScriptDiagnostics();
@@ -3904,12 +4050,12 @@ namespace renegade::runtime
         const bool inventoryOwnsInput=inventoryOverlayOpen_ &&
             inventoryScreenPresenter_->IsLoaded();
         screenPresenter_->SetInputEnabled(
-            !inventoryOwnsInput && uiComposition_.PrimaryAcceptsInput());
+            !worldMapOpen_ && !inventoryOwnsInput && uiComposition_.PrimaryAcceptsInput());
         if(hudSession_.IsLoaded())
         {
             hudSession_.Presenter()->SetInputEnabled(
-                !inventoryOwnsInput && uiComposition_.HudAcceptsInput());
-            hudSession_.Presenter()->SetPresentationVisible(uiComposition_.IsHudVisible());
+                !worldMapOpen_ && !inventoryOwnsInput && uiComposition_.HudAcceptsInput());
+            hudSession_.Presenter()->SetPresentationVisible(!worldMapOpen_ && uiComposition_.IsHudVisible());
         }
         if(wasHudVisible!=uiComposition_.IsHudVisible())RefreshUiBindingSources();
         if(uiDrawOrder_!=state.drawOrder)
@@ -3926,14 +4072,14 @@ namespace renegade::runtime
             RefreshUiBindingSources();
         }
         RefreshEffectivePause();
-        if (dialogue_.Active() || inventoryOwnsInput) wi::input::HidePointer(false);
+        if (worldMapOpen_ || dialogue_.Active() || inventoryOwnsInput) wi::input::HidePointer(false);
         else if (state.cursor == bridge::ScreenCursorPolicy::Show) wi::input::HidePointer(false);
         else if (state.cursor == bridge::ScreenCursorPolicy::Hide) wi::input::HidePointer(true);
     }
 
     void RuntimeApplication::RefreshEffectivePause() noexcept
     {
-        renderer_.SetPauseOverlayVisible(manualPauseRequested_ && !uiPauseRequested_);
+        renderer_.SetPauseOverlayVisible(manualPauseRequested_ && !uiPauseRequested_ && !worldMapOpen_);
         renderer_.SetLevelComplete(directLevelWon_);
         const bool paused = directLevelWon_ || manualPauseRequested_ || uiPauseRequested_;
         if (paused_ == paused)
@@ -4084,6 +4230,7 @@ namespace renegade::runtime
             wi::physics::SetPosition(*body,position);
         player_.yaw=state.playerYaw;player_.pitch=state.playerPitch;
         dialogue_.Memory()=std::move(restoredDialogue);
+        combatState_.hurt.Reset();
         combatState_.playerHealth=state.playerHealth;
         combatState_.playerMaxHealth=state.playerMaxHealth;
         combatState_.playerDead=state.playerDead;
@@ -4098,7 +4245,7 @@ namespace renegade::runtime
         dialogue_.Reset(renderer_);
         if(!LoadGameplayAttributes(error))return false;
         uiComposition_.ClearPrimary();
-        uiComposition_.ClearHud();hudSession_.Reset(renderer_);hudSelection_.LeaveLevel();
+        uiComposition_.ClearHud();hudSession_.Reset(renderer_);locationOverlay_.Reset(renderer_);hudSelection_.LeaveLevel();
         hudContextEvents_.LeaveLevel();
         hudLevelKey_.clear();hudAppliedSelectionRevision_=0;
         uiDrawOrder_.clear();pendingHudActions_.clear();pendingActions_.clear();
@@ -4580,7 +4727,7 @@ namespace renegade::runtime
             if (enter && !c.suppressArrival) {
                 if (z.mode==1) ApplyZoneHealth(-combatState_.playerHealth);
                 else if (MovePlayerToZone(effects.checkpoint.value_or(ZonePose{player_.spawnPosition,0}),error)) {
-                    combatState_.playerDead=false; combatState_.playerHealth=combatState_.playerMaxHealth;
+                    combatState_.hurt.Reset();combatState_.playerDead=false; combatState_.playerHealth=combatState_.playerMaxHealth;
                 }
             }
             break;
@@ -4679,7 +4826,7 @@ namespace renegade::runtime
             std::string error;
             if (MovePlayerToZone(*e.checkpoint,error)) {
                 combatState_.playerHealth=combatState_.playerMaxHealth;
-                combatState_.playerDead=false;
+                combatState_.hurt.Reset();combatState_.playerDead=false;
             }
         }
         e.messages.erase(std::remove_if(e.messages.begin(),e.messages.end(),[&](auto& m){
@@ -4759,7 +4906,7 @@ namespace renegade::runtime
 
     void RuntimeApplication::UpdateZones(float dt)
     {
-        if (zoneContacts_.empty() || !player_.IsSpawned()) return;
+        if (!player_.IsSpawned()) return;
         StepZoneEffects(dt);
         const auto* level = flowStarted_ ? flow_.CurrentNode() : nullptr;
         if (level && level->kind != bridge::FlowNodeKind::Level) return;
@@ -4770,7 +4917,23 @@ namespace renegade::runtime
         {
             bridge::zones::Definition zone;
             const auto* transform = scene.transforms.GetComponent(contact.id);
-            if (!transform || !bridge::zones::Read(scene, contact.id, zone)) continue;
+            if (!transform || !bridge::zones::Read(scene, contact.id, zone)){
+                if(!contact.locationId.empty()){std::string error;creatorScripts_.Locations().Remove(contact.locationId,error);contact.locationId.clear();}
+                continue;
+            }
+            if(zone.behaviour==bridge::zones::Behaviour::Location){
+                if(contact.locationId.empty())contact.locationId=bridge::PersistentEntityId(scene,contact.id);
+                const auto* name=scene.names.GetComponent(contact.id);const auto point=transform->GetPosition();std::string error;
+                bridge::WorldLocation location{contact.locationId,name?name->name:"Location",{point.x,point.y,point.z},zone.location};
+                creatorScripts_.Locations().SyncNative(std::move(location),error);
+                const auto* known=creatorScripts_.Locations().Get(contact.locationId);
+                if(known&&!known->discovered&&bridge::zones::Contains(zone,XMLoadFloat4x4(&transform->world),player->GetPosition())){
+                    creatorScripts_.Locations().Discover(contact.locationId,error);
+                    bridge::GameplayEvent event;event.name="location.discovered";event.senderEntityId=contact.locationId;event.payload=name?name->name:"Location";
+                    creatorScripts_.EnqueueGameplayEvent(std::move(event),error);
+                }
+            }else if(!contact.locationId.empty()){std::string error;creatorScripts_.Locations().Remove(contact.locationId,error);contact.locationId.clear();}
+
             const bool inside = bridge::zones::Contains(zone, XMLoadFloat4x4(&transform->world), player->GetPosition());
             if (inside && contact.healthRunning && zone.behaviour==bridge::zones::Behaviour::Health)
                 ApplyZoneHealth((zone.mode==3 ? zone.amount : -zone.amount)*dt);
@@ -4808,11 +4971,53 @@ namespace renegade::runtime
             if (!creatorScripts_.EnqueueGameplayEvent(std::move(event), error))
                 wi::backlog::post("Zone event: " + error, wi::backlog::LogLevel::Warning);
         }
+        const auto position=player->GetPosition();creatorScripts_.Locations().Tick(dt,bridge::NavigationPoint{position.x,position.y,position.z});
     }
 
     void RuntimeApplication::QueueAction(RuntimeActionRequest request)
     {
         pendingActions_.push_back(std::move(request));
+    }
+
+    void RuntimeApplication::UpdateLoadingScreen(float dt)
+    {
+        auto& load=*pendingLevelLoad_;
+        pendingActions_.clear();
+        screenPresenter_->UpdateInput(renderer_,*screenController_,false,dt);
+        wi::Application::Update(0);
+        if (++load.frames==1) return;
+        if (load.prepared.wait_for(std::chrono::seconds(0))!=std::future_status::ready) return;
+        RuntimeActionResult result;
+        result.request=load.request;
+        auto next=startupResult_;
+        std::string error;
+        try
+        {
+            auto prepared=load.prepared.get();
+            result.succeeded=load.nextFlow.ApplyStep(scenes_,next,load.step,error,&prepared);
+        }
+        catch (const std::exception& failure) { error=failure.what(); }
+        if (result.succeeded)
+        {
+            startupResult_=std::move(next);
+            flow_=std::move(load.nextFlow);
+            screenPresenter_->Reset(renderer_);
+            uiComposition_.ClearPrimary();
+            pendingEnterOverride_.reset();
+            result.code=RuntimeActionCode::Success;
+            result.message="Loaded "+startupResult_.flowNodeName;
+            wi::backlog::post("Loading screen: "+std::to_string(load.frames)+" updates before level handoff.");
+        }
+        else
+        {
+            result.code=RuntimeActionCode::FlowStartFailed;
+            result.message=error;
+            CancelScreenExit();
+            std::string restoreError;
+            if (!LoadCurrentFlowScreen(restoreError)) result.message+="; "+restoreError;
+        }
+        pendingLevelLoad_.reset();
+        RecordAction(result);
     }
 
     void RuntimeApplication::ProcessPendingActions()
@@ -4861,6 +5066,27 @@ namespace renegade::runtime
                 RuntimeActionResult result;result.request=request;
                 auto step=flow_.EmitOutcome(request.actionId);
                 std::string error;
+                if (step.succeeded && step.currentNodeKind==bridge::FlowNodeKind::Level &&
+                    step.destinationEntry!="renegade.ui.resume")
+                {
+                    const auto& project=startupResult_.project;
+                    std::string loadingPath,scenePath;
+                    bridge::ScreenDocument loading;
+                    if (bridge::ResolveScreenResourcePath(project.rootPath,"Content/Screens/Loading.renegade-screen",loadingPath,error) &&
+                        bridge::ReadScreenDocument(loadingPath,project.projectId,loading,error) && loading.enabledInGame &&
+                        bridge::ResolveSceneDocumentPath(project.rootPath,project.projectId,step.sceneAssetId,step.scenePathHint,scenePath,error) &&
+                        LoadPrimaryScreenDocument(loading,error))
+                    {
+                        PendingLevelLoad load;
+                        load.nextFlow=flow_;
+                        flow_=oldFlow;
+                        load.step=step;
+                        load.request=request;
+                        load.prepared=std::async(std::launch::async,[scenePath] { return bridge::PrepareWickedSceneOpen(scenePath); });
+                        pendingLevelLoad_.emplace(std::move(load));
+                        return;
+                    }
+                }
                 if(!step.succeeded||!flow_.ApplyStep(scenes_,startupResult_,step,error))
                 {
                     zoneArrivalMarker_.clear(); flow_=oldFlow;startupResult_=oldBootstrap;CancelScreenExit();
@@ -4958,5 +5184,67 @@ namespace renegade::runtime
         }
 
         ++evidenceRevision_;
+    }
+}
+
+namespace renegade::runtime
+{
+    bool RuntimeApplication::SetWorldMapOpen(bool open,std::string& error)
+    {
+        if(open==worldMapOpen_){error.clear();return true;}
+        if(!open){worldMapOverlay_.Reset(renderer_);worldMapOpen_=false;worldMapCloseRequested_=false;SetPaused(worldMapWasPaused_);error.clear();return true;}
+        if(!player_.IsSpawned()){error="A world map requires an active player.";return false;}
+        auto map=bridge::MakeWorldMinimapWidget();
+        for(const auto& [id,view]:creatorScripts_.Navigation().Snapshot().views)
+            if(view.widget.navigation&&view.widget.navigation->minimap&&!view.widget.navigation->minimap->fullMap){map=view.widget;break;}
+        auto& c=*map.navigation;auto& m=*c.minimap;
+        if(!m.mapKeyEnabled){error="Full map is disabled in the minimap settings.";return false;}
+        map.id=bridge::GenerateStableId();map.parentId.clear();map.component.reset();map.animations.clear();map.layoutMode=bridge::ScreenLayoutMode::Absolute;
+        map.rect={80,76,1120,564};map.name="World map artwork";c.headingSource=bridge::NavigationHeadingSource::Player;
+        if(!m.worldMapImage.empty())m.image=m.worldMapImage;else if(m.live)m.image.clear();
+        m.live=false;m.fullMap=true;m.rotate=false;m.round=false;m.clampEdges=false;m.resolution=2048;
+        m.range=std::max(m.north-m.south,(m.east-m.west)/(1120.f/564.f))*.5f;
+        c.showNames=true;c.showDistance=false;map.style.cornerRadius=6;map.style.opacity=1;
+        bridge::ScreenDocument doc;doc.usage=bridge::ScreenUsage::Hud;
+        doc.envelope=bridge::CreateDocumentEnvelope(startupResult_.project.projectId,bridge::RuntimeScreenDocumentType,"Content/UI/RuntimeWorldMap.renegade-screen","runtime-world-map");
+        bridge::ScreenWidget backing;backing.id=bridge::GenerateStableId();backing.name="World map backing";backing.kind=bridge::ScreenWidgetKind::Image;backing.enabled=false;backing.rect={0,0,1280,720};backing.style=bridge::MakeScreenWidgetStyleTemplate(backing.kind,720);
+        for(auto* v:{&backing.style.normal,&backing.style.hover,&backing.style.pressed,&backing.style.focused,&backing.style.disabled})v->background={12,16,22,245};
+        bridge::ScreenWidget title;title.id=bridge::GenerateStableId();title.name="Map title";title.kind=bridge::ScreenWidgetKind::Text;title.text="WORLD MAP";title.enabled=false;title.rect={80,20,500,40};title.style=bridge::MakeScreenWidgetStyleTemplate(title.kind,40);title.style.text.fontSize=24;
+        bridge::ScreenWidget close;close.id=bridge::GenerateStableId();close.name="Close map";close.kind=bridge::ScreenWidgetKind::Button;close.text="CLOSE";close.actionId="ui.map.close";close.rect={1100,20,100,40};close.style=bridge::MakeScreenWidgetStyleTemplate(close.kind,40);
+        doc.widgets={backing,map,title,close};doc.actions.push_back({close.actionId});doc.focusOrder={close.id};
+        if(!worldMapOverlay_.Load(doc,startupResult_.project.rootPath,renderer_,[this](RuntimeActionRequest request){if(request.actionId=="ui.map.close")worldMapCloseRequested_=true;},error,uiAccessibility_.reducedMotion,uiAccessibility_.presentation))return false;
+        worldMapWasPaused_=manualPauseRequested_;worldMapOpen_=true;worldMapCloseRequested_=false;SetPaused(true);wi::input::HidePointer(false);error.clear();return true;
+    }
+}
+
+namespace renegade::runtime
+{
+    void RuntimeRenderPath::RestoreHurtCamera()
+    {
+        if(hurtCameraApplied_&&camera){camera->TransformCamera(XMLoadFloat4x4(&hurtCameraPose_));camera->UpdateCamera();}
+        hurtCameraApplied_=false;
+    }
+    void RuntimeApplication::UpdateHurtFeedback(float dt)
+    {
+        const float heading=renderer_.camera?float(std::atan2(renderer_.camera->At.x,renderer_.camera->At.z)*180/3.141592653589793):0;
+        combatState_.hurt.Tick(paused_?0:dt,player_.IsSpawned(),!combatState_.playerDead,combatState_.playerHealth,combatState_.playerMaxHealth,heading);
+        auto& service=creatorScripts_.HurtFeedback();std::set<bridge::StableId> active;
+        const auto observe=[&](const RuntimeScreenController& controller){for(const auto& w:controller.AuthoredDocument().widgets)if(w.hurt)active.insert(w.id);service.Observe(controller.AuthoredDocument());};
+        if(screenPresenter_->IsLoaded())observe(*screenController_);
+        if(hudSession_.IsLoaded())observe(*hudSession_.Controller());
+        service.RetainAuthored(active);service.SetFrame(combatState_.hurt.Frame());
+        std::string error;
+        if(screenPresenter_->IsLoaded())screenPresenter_->SetHurtFeedbackState(service.Snapshot(),false,!paused_,error);
+        if(hudSession_.IsLoaded())hudSession_.Presenter()->SetHurtFeedbackState(service.Snapshot(),true,!paused_&&uiComposition_.IsHudVisible()&&!worldMapOpen_,error);
+        float shake=0;
+        if(!paused_&&!worldMapOpen_&&uiComposition_.IsHudVisible()&&!uiAccessibility_.reducedMotion)
+            for(const auto& [id,view]:service.Snapshot().views)if(view.widget.visible)shake=std::max(shake,bridge::SampleHurtFeedback(*view.widget.hurt,service.Snapshot().frame).shake);
+        const auto& feedback=service.Snapshot().frame;
+        diagnosticService_.SetState("hurt_feedback",{{"available",feedback.available},{"alive",feedback.alive},
+            {"health_fraction",std::to_string(feedback.healthFraction)},{"hit_sequence",feedback.sequence},
+            {"last_hit_age",std::to_string(feedback.hits.empty()?-1:feedback.hits.back().age)},
+            {"seconds",std::to_string(feedback.seconds)},{"paused",paused_},{"shake",std::to_string(shake)}});
+        const auto seconds=feedback.seconds;
+        renderer_.SetHurtCameraShake({std::sin(seconds*113)*shake,std::sin(seconds*149)*shake*.7f});
     }
 }

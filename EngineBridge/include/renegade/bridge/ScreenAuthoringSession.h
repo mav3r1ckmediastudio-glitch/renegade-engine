@@ -332,6 +332,66 @@ namespace renegade::bridge
             return CommitMutation(std::move(candidate),error);
         }
 
+        [[nodiscard]] bool SetHintList(const StableId& id,const std::string& path,std::string& error)
+        {
+            if (!loaded_) {error="Open a screen first.";return false;}
+            auto candidate=Document();
+            for (auto& widget:candidate.widgets) if (widget.id==id && widget.kind==ScreenWidgetKind::Text)
+            {
+                widget.hintListPath=path;
+                if (candidate.schemaVersion<3) {candidate.migratedFromVersion=candidate.schemaVersion;candidate.schemaVersion=3;}
+                return CommitMutation(std::move(candidate),error);
+            }
+            error="Select a Text element.";return false;
+        }
+
+        [[nodiscard]] bool SetCarousel(const StableId& id,ScreenCarousel deck,std::string& error)
+        {
+            if (!loaded_) {error="No screen is open.";return false;}
+            auto next=Document();
+            for (auto& w:next.widgets) if (w.id==id && w.carousel)
+            {
+                w.carousel=std::move(deck);
+                return CommitMutation(std::move(next),error);
+            }
+            error="Select a carousel first.";
+            return false;
+        }
+        [[nodiscard]] bool SetVideoPanel(const StableId& id, ScreenVideoPanel video, std::string& error)
+        {
+            if (!loaded_) { error="No screen is open."; return false; }
+            auto candidate=Document();
+            for (auto& widget : candidate.widgets)
+            {
+                if (widget.id!=id || widget.kind!=ScreenWidgetKind::Image) continue;
+                widget.video=std::move(video);
+                widget.cameraSource.reset();
+                if (candidate.schemaVersion<3)
+                { candidate.migratedFromVersion=candidate.schemaVersion; candidate.schemaVersion=3; }
+                return CommitMutation(std::move(candidate),error);
+            }
+            error="Select a video or background panel.";
+            return false;
+        }
+
+        [[nodiscard]] bool SetBackgroundCamera(const StableId& id,
+            std::optional<ScreenCameraSource> source,std::string& error)
+        {
+            if(!loaded_){error="No screen is open.";return false;}
+            auto candidate=Document();
+            for(auto& widget:candidate.widgets)
+            {
+                if(widget.id!=id || widget.kind!=ScreenWidgetKind::Image || !widget.parentId.empty())continue;
+                widget.backgroundPanel=true;
+                widget.video.reset();
+                widget.cameraSource=std::move(source);
+                if(candidate.schemaVersion<3)
+                {candidate.migratedFromVersion=candidate.schemaVersion;candidate.schemaVersion=3;}
+                return CommitMutation(std::move(candidate),error);
+            }
+            error="Select a background panel.";return false;
+        }
+
         [[nodiscard]] bool UpdateWidgetAnimations(const StableId& id,
             std::vector<ScreenAnimationTrack> tracks,std::string& error)
         {
@@ -345,6 +405,37 @@ namespace renegade::bridge
             w->animations=std::move(tracks);w->themeOverrides|=32;
             if(candidate.schemaVersion<3)
             {candidate.migratedFromVersion=candidate.schemaVersion;candidate.schemaVersion=3;}
+            return CommitMutation(std::move(candidate),error);
+        }
+
+        bool ConfigureHurtFeedback(const StableId& id,ScreenHurtFeedback config,std::string& error)
+        {
+            auto d=Document();for(auto& w:d.widgets)if(w.id==id){
+                if(w.kind!=ScreenWidgetKind::Image||!ValidateHurtFeedback(config,error))return false;
+                w.hurt=std::move(config);if(w.component)w.component->overrides|=512;
+                if(d.schemaVersion<3){d.migratedFromVersion=d.schemaVersion;d.schemaVersion=3;}
+                return CommitMutation(std::move(d),error);
+            }error="Select a hurt feedback layer.";return false;
+        }
+        bool ConfigureNavigationComponent(const StableId&,const ScreenWidget&,std::string& error);
+        bool ConfigureNavigation(const StableId&,std::optional<ScreenNavigation>,std::string& error);
+        bool ApplyNavigationAppearance(const StableId&,const ScreenWidget&,std::string& error,bool keepAssignedIcons=true);
+        [[nodiscard]] bool ConfigureProgressFill(const StableId& id,
+            std::optional<ScreenLiquid> liquid, ScreenColor colour,
+            std::vector<ScreenBinding> bindings, ScreenFillDirection direction, std::string& error);
+
+        [[nodiscard]] bool ConfigureLiquidWidget(const StableId& id,ScreenLiquid liquid,
+            ScreenColor colour,std::vector<ScreenBinding> bindings,std::string& error)
+        {
+            if(!loaded_){error="No Screen is open.";return false;}
+            auto candidate=Document();
+            const auto w=std::find_if(candidate.widgets.begin(),candidate.widgets.end(),[&](const auto& item){return item.id==id;});
+            if(w==candidate.widgets.end()||w->kind!=ScreenWidgetKind::Progress)
+            {error="Select a liquid Progress layer.";return false;}
+            w->liquid=std::move(liquid);w->bindings=std::move(bindings);w->themeOverrides|=1;
+            for(auto* v:{&w->style.normal,&w->style.hover,&w->style.pressed,&w->style.focused,&w->style.disabled})v->imageTint=colour;
+            if(w->component)w->component->overrides|=1|256|512;
+            if(candidate.schemaVersion<3){candidate.migratedFromVersion=candidate.schemaVersion;candidate.schemaVersion=3;}
             return CommitMutation(std::move(candidate),error);
         }
 
@@ -404,6 +495,11 @@ namespace renegade::bridge
             const StableId& widgetId,
             ScreenWidgetAuthoringEdit edit,
             std::string& error);
+
+        // Creator-requested geometry may override one automatic cell without
+        // changing its parent, siblings, action identity or inherited state.
+        [[nodiscard]] bool UpdateWidgetManually(const StableId& widgetId,
+            ScreenWidgetAuthoringEdit edit, std::string& error);
 
         bool UpdateDialogueRole(const StableId& id, std::string role, std::string& error)
         {
@@ -528,10 +624,15 @@ namespace renegade::bridge
                 if(found->resourcePath!=edit.resourcePath)found->component->overrides|=8;
             }
             if(found->resourcePath!=edit.resourcePath)found->themeOverrides|=8;
+            if (found->video && (found->resourcePath!=edit.resourcePath ||
+                found->style.normal.imageResourcePath!=edit.style.normal.imageResourcePath))
+                found->video.reset();
             found->resourcePath = std::move(edit.resourcePath);
             found->actionId = std::move(edit.actionId);
             found->parentId = std::move(edit.parentId);
             found->layoutMode = edit.layoutMode;
+            if(found->layoutMode==ScreenLayoutMode::Manual&&candidate.schemaVersion<3)
+            {candidate.migratedFromVersion=candidate.schemaVersion;candidate.schemaVersion=3;}
             found->anchors = edit.anchors;
             found->themeOverrides|=ScreenStyleChangedGroups(found->style,edit.style);
             found->style = std::move(edit.style);
@@ -546,7 +647,7 @@ namespace renegade::bridge
             }
             const float relativeX = resolvedBefore.x - parentRect.x;
             const float relativeY = resolvedBefore.y - parentRect.y;
-            if (found->layoutMode == ScreenLayoutMode::Absolute)
+            if (found->layoutMode != ScreenLayoutMode::Anchored)
             {
                 found->rect = {
                     relativeX,
@@ -928,7 +1029,7 @@ namespace renegade::bridge
         // Replace only artwork; retain geometry, actions, text, bindings and identity.
         // Bulk scope is restricted to recognised inventory slot buttons.
         [[nodiscard]] bool ChangeWidgetGraphic(const StableId& source,
-            const std::string& resource,bool allInventorySlots,std::string& error);
+            const std::string& resource,bool allInventorySlots,std::string& error,bool useImageSource=false);
         [[nodiscard]] bool ApplyPagedInventoryAppearance(
             const StableId& source,std::string& error);
         [[nodiscard]] bool ResizePagedInventoryGrid(
@@ -953,6 +1054,8 @@ namespace renegade::bridge
         [[nodiscard]] const StableId& ProjectId() const noexcept;
 
     private:
+        bool UpdateWidgetGeometry(const StableId& widgetId,
+            ScreenWidgetAuthoringEdit edit, bool manualOverride, std::string& error);
         friend class ScreenFlowAtomicSaveService;
         [[nodiscard]] bool MoveWidgetLayer(
             const StableId& widgetId, int direction, bool toBoundary,

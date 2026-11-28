@@ -124,7 +124,9 @@ namespace renegade::bridge
             if (assigned.find(node.id) != assigned.end()) continue;
             // Passive Player HUD has no navigation routes by design: give it
             // an overlay lane, not an unreachable/detached error lane.
-            buildPendingTrack({node.id, {}, false, !IsStarterPlayerHud(node), 0});
+            const bool loadingOverlay=node.kind==FlowNodeKind::Screen &&
+                node.screenPathHint=="Content/Screens/Loading.renegade-screen";
+            buildPendingTrack({node.id, {}, false, !IsStarterPlayerHud(node) && !loadingOverlay, 0});
             while (!pending.empty())
             {
                 PendingTrack next = std::move(pending.front());

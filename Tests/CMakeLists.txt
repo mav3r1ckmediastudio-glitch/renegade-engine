@@ -197,6 +197,12 @@ add_test(NAME RenegadeForkLightningTests COMMAND RenegadeForkLightningTests)
 
 # Gate 3 governed creator Lua weather gameplay contract. Same sandbox and
 # shared runtime state as production; no second Lua interpreter.
+add_executable(RenegadeScreenClickSoundTests ScreenClickSoundTests.cpp)
+target_link_libraries(RenegadeScreenClickSoundTests PRIVATE Renegade::RuntimeBootstrap)
+set_target_properties(RenegadeScreenClickSoundTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeScreenClickSoundTests COMMAND RenegadeScreenClickSoundTests)
+add_dependencies(RenegadeBridgeTests RenegadeScreenClickSoundTests)
+
 add_executable(RenegadeWeatherLuaRuntimeTests WeatherLuaRuntimeTests.cpp)
 target_link_libraries(RenegadeWeatherLuaRuntimeTests PRIVATE Renegade::RuntimeBootstrap)
 set_target_properties(RenegadeWeatherLuaRuntimeTests PROPERTIES FOLDER "Renegade/Tests")
@@ -1372,6 +1378,10 @@ target_include_directories(RenegadeScreenLibraryTests PRIVATE ${PROJECT_SOURCE_D
 
 # Default creator scaffold: real Flow/Level, assets, optional capabilities and retained resume.
 add_executable(RenegadeProjectUiScaffoldTests ProjectUiScaffoldTests.cpp)
+add_custom_command(TARGET RenegadeProjectUiScaffoldTests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/Studio/assets/ui/loading"
+        "$<TARGET_FILE_DIR:RenegadeProjectUiScaffoldTests>/Content/UI/Loading" VERBATIM)
+
 target_link_libraries(RenegadeProjectUiScaffoldTests PRIVATE Renegade::EngineBridge Renegade::RuntimeBootstrap)
 target_compile_options(RenegadeProjectUiScaffoldTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 add_dependencies(RenegadeBridgeTests RenegadeProjectUiScaffoldTests)
@@ -2258,3 +2268,42 @@ target_link_libraries(RenegadeTerrainPropCollisionWorldTests PRIVATE Renegade::E
 add_test(NAME RenegadeTerrainPropCollisionWorldTests COMMAND RenegadeTerrainPropCollisionWorldTests)
 set_tests_properties(RenegadeTerrainPropCollisionWorldTests PROPERTIES TIMEOUT 90)
 add_dependencies(RenegadeBridgeTests RenegadeTerrainPropCollisionWorldTests)
+
+add_executable(RenegadeScreenHealthPrefabTests ScreenHealthPrefabTests.cpp)
+target_link_libraries(RenegadeScreenHealthPrefabTests PRIVATE Renegade::EngineBridge)
+target_include_directories(RenegadeScreenHealthPrefabTests PRIVATE ${PROJECT_SOURCE_DIR}/WickedEngine/Editor)
+add_test(NAME RenegadeScreenHealthPrefabTests COMMAND RenegadeScreenHealthPrefabTests)
+set_tests_properties(RenegadeScreenHealthPrefabTests PROPERTIES TIMEOUT 30)
+add_dependencies(RenegadeBridgeTests RenegadeScreenHealthPrefabTests)
+
+add_executable(RenegadeWorldNavigationTests WorldNavigationTests.cpp)
+target_link_libraries(RenegadeWorldNavigationTests PRIVATE Renegade::RuntimeBootstrap)
+target_compile_options(RenegadeWorldNavigationTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+add_test(NAME RenegadeWorldNavigationTests COMMAND RenegadeWorldNavigationTests)
+set_tests_properties(RenegadeWorldNavigationTests PROPERTIES TIMEOUT 30)
+add_dependencies(RenegadeBridgeTests RenegadeWorldNavigationTests)
+
+add_executable(RenegadeWorldLocationTests WorldLocationTests.cpp)
+target_link_libraries(RenegadeWorldLocationTests PRIVATE Renegade::RuntimeBootstrap)
+target_compile_options(RenegadeWorldLocationTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+add_test(NAME RenegadeWorldLocationTests COMMAND RenegadeWorldLocationTests)
+set_tests_properties(RenegadeWorldLocationTests PROPERTIES TIMEOUT 30)
+add_dependencies(RenegadeBridgeTests RenegadeWorldLocationTests)
+
+add_executable(RenegadeScreenAmmoPrefabTests ScreenAmmoPrefabTests.cpp)
+target_link_libraries(RenegadeScreenAmmoPrefabTests PRIVATE Renegade::RuntimeBootstrap)
+add_test(NAME RenegadeScreenAmmoPrefabTests COMMAND RenegadeScreenAmmoPrefabTests)
+set_tests_properties(RenegadeScreenAmmoPrefabTests PROPERTIES TIMEOUT 30)
+add_dependencies(RenegadeBridgeTests RenegadeScreenAmmoPrefabTests)
+
+add_executable(RenegadeMinimapTests MinimapTests.cpp)
+target_link_libraries(RenegadeMinimapTests PRIVATE Renegade::RuntimeBootstrap)
+add_test(NAME RenegadeMinimapTests COMMAND RenegadeMinimapTests)
+set_tests_properties(RenegadeMinimapTests PROPERTIES TIMEOUT 30)
+add_dependencies(RenegadeBridgeTests RenegadeMinimapTests)
+
+add_executable(RenegadeHurtFeedbackTests HurtFeedbackTests.cpp)
+target_link_libraries(RenegadeHurtFeedbackTests PRIVATE Renegade::RuntimeBootstrap)
+add_test(NAME RenegadeHurtFeedbackTests COMMAND RenegadeHurtFeedbackTests)
+set_tests_properties(RenegadeHurtFeedbackTests PROPERTIES TIMEOUT 30)
+add_dependencies(RenegadeBridgeTests RenegadeHurtFeedbackTests)

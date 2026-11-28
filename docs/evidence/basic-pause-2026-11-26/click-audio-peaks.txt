@@ -1,0 +1,5 @@
+preview-default session 62284 peak 0.330708 samples 300
+inherited-title session 51712 peak 0.330708 samples 300
+local-options session 51712 peak 0.0829823 samples 300
+inherited-resume session 51712 peak 0.330708 samples 300
+silent-main-menu session 51712 peak 7.16337e-29 samples 300

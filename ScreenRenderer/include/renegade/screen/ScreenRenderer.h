@@ -1,4 +1,7 @@
+#include "renegade/bridge/WorldNavigationService.h"
+#include "renegade/bridge/WorldLocationService.h"
 #pragma once
+#include "renegade/bridge/HurtFeedbackService.h"
 
 #include "renegade/bridge/ScreenService.h"
 #include "renegade/bridge/ScreenAccessibility.h"
@@ -12,6 +15,7 @@
 namespace wi
 {
     class RenderPath2D;
+    namespace graphics {struct Texture;}
 }
 
 namespace renegade::screen
@@ -121,6 +125,16 @@ namespace renegade::screen
         // central canvas. Runtime leaves this unset and continues to use the
         // full RenderPath logical extent.
         void SetViewport(const bridge::ScreenRect& viewport) noexcept;
+        void SetBackgroundCamera(const bridge::StableId& widget,std::optional<bridge::ScreenCameraSource> source,std::uint64_t revision,bool useAuthoredMedia);
+        void SetWidgetMedia(const bridge::StableId& widget,const std::optional<bridge::ScreenVideoPanel>& video,const std::string& hints);
+        std::string VideoInfo(const bridge::StableId& id) const;
+        std::uint64_t BackgroundCameraRevision() const;
+        void UpdateCameraFeed(float dt);
+        using MinimapTextureProvider=std::function<const wi::graphics::Texture*(const bridge::StableId&)>;
+        void SetMinimapTextureProvider(MinimapTextureProvider provider);
+        // Transient authoring preview, never mutates the Screen asset.
+        bool PreviewCarouselEntry(const bridge::StableId& id,size_t entry);
+        void RefreshCarouselPresentation();
         void ClearViewport() noexcept;
         // Optional editor clip is independent of the projected document viewport.
         // Runtime leaves this unset; authored geometry is never modified.
@@ -145,6 +159,8 @@ namespace renegade::screen
         void EmbedInWindow(wi::RenderPath2D& renderPath,wi::gui::Window& parent);
         void DetachPresentation(wi::RenderPath2D& renderPath) noexcept;
         [[nodiscard]] bool IsInputEnabled() const noexcept;
+        void PlayButtonClick(const bridge::StableId& id);
+        void PreviewWidgetAppearance(const bridge::StableId& widgetId, ScreenInteractionState state, const bridge::ScreenColor* colour = nullptr);
         void SetFocusedWidget(const bridge::StableId& widgetId);
         void SetWidgetState(
             const bridge::StableId& widgetId,
@@ -154,7 +170,18 @@ namespace renegade::screen
         // accessible layout pass as all authored widgets. No persisted edits.
         void SetScrollbarThumb(const bridge::StableId& thumbId,
             const bridge::StableId& trackId,float position,float fraction);
+        const bridge::ScreenWidget* NavigationPrototype(const bridge::StableId&)const;
+        bool PreviewNavigationDraft(const bridge::StableId&,const bridge::ScreenNavigation&,float heading,std::string& error,const bridge::ScreenWidget* appearance=nullptr);
+        bool SetHurtFeedbackState(const bridge::HurtFeedbackSnapshot&,bool includeCreated,bool allowAudio,std::string& error);
+        void PreviewHurtFeedback(const bridge::StableId&,const bridge::HurtFeedbackFrame&,bool audio=false);
+        void SetLocationAnnouncement(const std::optional<bridge::LocationAnnouncementFrame>&);
+        bool SetNavigationState(const bridge::WorldNavigationSnapshot&,bool includeCreated,std::string& error);
         void SetWidgetFill(const bridge::StableId& widgetId, float fill);
+        // Local editor audition only; the owning Screen document stays unchanged.
+        void PreviewLiquidWidget(const bridge::StableId& widgetId,bridge::ScreenColor colour,float fill);
+        bool PreviewLiquidDraft(const bridge::StableId& widgetId,
+            const std::optional<bridge::ScreenLiquid>& liquid,bridge::ScreenFillDirection direction,
+            bridge::ScreenColor colour,float fill,std::string& error);
         void SetWidgetText(const bridge::StableId& widgetId, const std::string& text);
         // Transient image for UI-bound icon widgets. Only project-contained
         // Image resources may be loaded, never an arbitrary filesystem path.

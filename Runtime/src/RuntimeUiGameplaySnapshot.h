@@ -3,11 +3,27 @@
 #include "RuntimePlayerViewAnimation.h"
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/ScreenBindingFrame.h"
+#include "renegade/bridge/PlayerWeaponAmmo.h"
 #include <set>
 #include <tuple>
 
 namespace renegade::runtime
 {
+    inline bridge::PlayerWeaponAmmo CapturePlayerWeaponAmmo(
+        const RuntimePlayerViewAnimationState* view,const std::string& name,unsigned slot)
+    {
+        bridge::PlayerWeaponAmmo result;
+        if(!view||!view->initialized)return result;
+        result.equipped=view->equipped;result.name=name;result.slot=slot;
+        result.available=view->pairedAssembly&&!view->meleeWeapon&&!view->spellPresentation&&view->equipped;
+        if(result.available){
+            result.loaded=view->loadedShells;result.capacity=view->firearm.capacity;
+            result.reloading=view->reloadStagePlaying||(view->oneShotPlaying&&
+                (view->activeAction==PlayerViewAction::Reload||view->activeAction==PlayerViewAction::ReloadPartial));
+        }
+        return result;
+    }
+
     struct RuntimeUiGameplaySources
     {
         const bridge::RuntimePlayerState* player = nullptr;
@@ -21,6 +37,7 @@ namespace renegade::runtime
         const bridge::GameplayAttributeInstance* projectAttributes = nullptr;
         const std::map<bridge::StableId, bridge::GameplayAttributeInstance>* characterAttributes = nullptr;
         std::string weaponName,weaponSlots;
+        unsigned weaponSlot=0;
     };
 
     // Read-only adapters over actual gameplay owners. It never creates health,
@@ -89,18 +106,22 @@ namespace renegade::runtime
                         else if (source.attributeId == "health.maximum") { value = double(sources.combat->playerMaxHealth); available = true; }
                         else if (source.attributeId == "alive") { value = !sources.combat->playerDead; available = true; }
                     }
+                    const auto ammo=CapturePlayerWeaponAmmo(sources.playerView,sources.weaponName,sources.weaponSlot);
+                    if(source.attributeId=="ammo.available"){value=ammo.available;available=true;}
                     if (sources.playerView && sources.playerView->initialized)
                     {
                         if(source.attributeId=="equipment.name" && !sources.weaponName.empty()){value=sources.weaponName;available=true;}
                         if(source.attributeId=="equipment.slots" && !sources.weaponSlots.empty()){value=sources.weaponSlots;available=true;}
                         if (source.attributeId == "equipment.equipped")
                         { value = sources.playerView->equipped; available = true; }
-                        if (sources.playerView->pairedAssembly)
+                        if(source.attributeId=="equipment.slot"&&ammo.slot>0){value=double(ammo.slot);available=true;}
+                        if (ammo.available)
                         {
                             if (source.attributeId == "ammo.loaded")
-                            { value = double(sources.playerView->loadedShells); available = true; }
+                            { value = double(ammo.loaded); available = true; }
                             else if (source.attributeId == "ammo.capacity")
-                            { value = double(sources.playerView->firearm.capacity); available = true; }
+                            { value = double(ammo.capacity); available = true; }
+                            else if(source.attributeId=="ammo.reloading"){value=ammo.reloading;available=true;}
                         }
                     }
                     if (!available && !IsNativeAttribute(source.attributeId) && sources.playerAttributes)
@@ -171,8 +192,8 @@ namespace renegade::runtime
         static bool IsNativeAttribute(const std::string& id)
         {
             return id == "health.current" || id == "health.maximum" || id == "alive" ||
-                id == "ammo.loaded" || id == "ammo.capacity" || id == "ammo.reserve" ||
-                id == "ammo.reloading" || id == "equipment.equipped" || id=="equipment.name" || id=="equipment.slots";
+                id == "ammo.available" || id == "ammo.loaded" || id == "ammo.capacity" || id == "ammo.reserve" ||
+                id == "ammo.reloading" || id == "equipment.equipped" || id=="equipment.name" || id=="equipment.slots" || id=="equipment.slot";
         }
         struct Lifetime
         {

@@ -1,4 +1,7 @@
+#include "renegade/bridge/WorldLocationService.h"
+#include "renegade/bridge/WorldNavigationService.h"
 #pragma once
+#include "renegade/bridge/HurtFeedbackService.h"
 
 #include "renegade/bridge/ScriptDocumentService.h"
 #include "renegade/bridge/GameplayInputService.h"
@@ -6,6 +9,7 @@
 #include "renegade/bridge/GameplayEventService.h"
 #include "renegade/bridge/InventoryGameplayGateway.h"
 #include "RuntimeDialogueScriptApi.h"
+#include "renegade/bridge/PlayerWeaponAmmo.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -71,6 +75,12 @@ namespace renegade::runtime
         // Bind the live gameplay state owned by RuntimeApplication. Creator
         // scripts read this state through governed player/input namespaces;
         // they never poll Wicked's global input or receive raw ECS handles.
+        bridge::WorldNavigationService& Navigation();
+        bridge::HurtFeedbackService& HurtFeedback();
+        void SetHurtFeedbackApi(std::function<bool(float,std::optional<float>,std::string&)>,std::function<void()>);
+        bridge::WorldLocationService& Locations();
+        void ResolveNavigationEntities();
+
         void SetGameplayState(
             const bridge::RuntimePlayerState* player,
             const bridge::GameplayInputFrame* input) noexcept;
@@ -88,6 +98,9 @@ namespace renegade::runtime
         // Configure before StartScene. Empty callbacks omit renegade.dialogue.
         // The host owns the same conversation/memory used by normal NPC input.
         void SetDialogueApi(RuntimeDialogueScriptApi api);
+        void SetWorldMapApi(std::function<bool(bool,std::string&)> set,std::function<bool()> get);
+        // Host callback reads the same active weapon used by native HUD bindings.
+        void SetWeaponAmmoProvider(std::function<bridge::PlayerWeaponAmmo()> provider);
 
         // Engine/runtime producers publish through the same bounded FIFO that
         // governed creator scripts consume in Update(). This is the single

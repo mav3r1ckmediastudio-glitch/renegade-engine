@@ -17,7 +17,7 @@ bool IsPagedAction(const std::string& name) {
 }
 }
 bool ScreenAuthoringSession::ChangeWidgetGraphic(const StableId& source,
-    const std::string& resource,bool allInventorySlots,std::string& error) {
+    const std::string& resource,bool allInventorySlots,std::string& error,bool useImageSource) {
     if(!IsLoaded()){error="Open a Screen first.";return false;}
     const auto* original=FindWidget(source);
     if(!original){error="Select a Screen element first.";return false;}
@@ -32,7 +32,7 @@ bool ScreenAuthoringSession::ChangeWidgetGraphic(const StableId& source,
             w.kind==ScreenWidgetKind::Button&&ParseInventoryPagedGridSlotAction(w.actionId,panel,cell):
             w.id==source;
         if(!target)continue;
-        if(w.kind==ScreenWidgetKind::Image)w.resourcePath=resource;
+        if(w.kind==ScreenWidgetKind::Image) { w.resourcePath=resource; if (useImageSource) {w.video.reset();w.cameraSource.reset();} }
         for(auto* visual:{&w.style.normal,&w.style.hover,&w.style.pressed,
                          &w.style.focused,&w.style.disabled})
             visual->imageResourcePath=resource;

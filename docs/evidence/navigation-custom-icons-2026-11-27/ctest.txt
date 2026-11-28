@@ -1,0 +1,13 @@
+Test project BUILD/creator
+    Start 175: StudioUiPolicy
+1/4 Test #175: StudioUiPolicy ........................   Passed    0.01 sec
+    Start 252: RenegadeScreenAuthoringSessionTests
+2/4 Test #252: RenegadeScreenAuthoringSessionTests ...   Passed    4.20 sec
+    Start 284: RenegadeScreenLibraryTests
+3/4 Test #284: RenegadeScreenLibraryTests ............   Passed    1.11 sec
+    Start 351: RenegadeWorldNavigationTests
+4/4 Test #351: RenegadeWorldNavigationTests ..........   Passed    0.45 sec
+
+100% tests passed out of 4
+
+Total Test time (real) =   6.31 sec
