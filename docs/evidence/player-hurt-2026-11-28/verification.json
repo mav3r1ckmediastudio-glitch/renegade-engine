@@ -1,0 +1,53 @@
+{
+  "implementation_commit": "b4a1cfaea02eeac18e44a42ba4427585805a54a6",
+  "platform": "Windows x64 Release DX12",
+  "builds": [
+    "EngineBridge",
+    "ScreenRenderer",
+    "RuntimeBootstrap",
+    "RenegadeRuntime",
+    "RenegadeStudio"
+  ],
+  "focused_release_tests_passed": [
+    "RenegadeHurtFeedbackTests",
+    "RenegadeCharacterAiCombatTests",
+    "RenegadeScreenAmmoPrefabTests",
+    "RenegadeScreenHealthPrefabTests",
+    "RenegadeMinimapTests",
+    "RenegadeWorldLocationTests",
+    "RenegadeWorldNavigationTests",
+    "RenegadeScreenRendererTests",
+    "RenegadeRuntimeUiGameplaySnapshotTests",
+    "RenegadeScreenLibraryTests",
+    "RenegadeStudioUiPolicyTests"
+  ],
+  "source_contracts_passed": [
+    "CharacterAiCombat",
+    "MarkerIcons",
+    "EditorPointLookup",
+    "Phase5Gate3",
+    "Phase6Gate3",
+    "CharacterWorkflow"
+  ],
+  "assistant_workflow_tests": 84,
+  "assistant_exit_code": 0,
+  "independent_release_gate": false,
+  "hosted_ci": false,
+  "native": [
+    "accepted damage and expiry",
+    "direction sample",
+    "persistent low-health pulse",
+    "save/load reset without false hit",
+    "custom resource pickers and owner-observed audio",
+    "visible optional camera shake and settling",
+    "exact Save Undo Redo Cancel",
+    "Basic insertion and exact one-step Undo",
+    "settings reopen and modal layout"
+  ],
+  "remaining": [
+    "Debug",
+    "exported package",
+    "large scenes",
+    "independent exact-commit release verification"
+  ]
+}

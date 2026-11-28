@@ -1,0 +1,82 @@
+{
+  "baseline": {
+    "alive": true,
+    "available": true,
+    "health_fraction": "1.000000",
+    "hit_sequence": 1,
+    "last_hit_age": "-1.000000",
+    "paused": false,
+    "seconds": "34.491337",
+    "shake": "0.000000"
+  },
+  "save-result": {
+    "alive": true,
+    "available": true,
+    "health_fraction": "1.000000",
+    "hit_sequence": 1,
+    "last_hit_age": "-1.000000",
+    "paused": false,
+    "seconds": "35.718456",
+    "shake": "0.000000"
+  },
+  "native-hit": {
+    "alive": true,
+    "available": true,
+    "health_fraction": "0.750000",
+    "hit_sequence": 2,
+    "last_hit_age": "0.334036",
+    "paused": false,
+    "seconds": "36.052494",
+    "shake": "0.000000"
+  },
+  "hit-faded": {
+    "alive": true,
+    "available": true,
+    "health_fraction": "0.750000",
+    "hit_sequence": 2,
+    "last_hit_age": "1.733907",
+    "paused": false,
+    "seconds": "37.452362",
+    "shake": "0.000000"
+  },
+  "direction-right": {
+    "alive": true,
+    "available": true,
+    "health_fraction": "0.750000",
+    "hit_sequence": 3,
+    "last_hit_age": "0.386795",
+    "paused": false,
+    "seconds": "37.852604",
+    "shake": "0.000000"
+  },
+  "low-health": {
+    "alive": true,
+    "available": true,
+    "health_fraction": "0.010000",
+    "hit_sequence": 6,
+    "last_hit_age": "1.055399",
+    "paused": false,
+    "seconds": "42.082718",
+    "shake": "0.000000"
+  },
+  "low-health-pulse": {
+    "alive": true,
+    "available": true,
+    "health_fraction": "0.010000",
+    "hit_sequence": 6,
+    "last_hit_age": "1.537404",
+    "paused": false,
+    "seconds": "42.564724",
+    "shake": "0.000000"
+  },
+  "restored-no-hit": {
+    "alive": true,
+    "available": true,
+    "health_fraction": "1.000000",
+    "hit_sequence": 0,
+    "last_hit_age": "-1.000000",
+    "paused": false,
+    "seconds": "4.227336",
+    "shake": "0.000000"
+  }
+}
