@@ -201,6 +201,7 @@ add_executable(RenegadeScreenClickSoundTests ScreenClickSoundTests.cpp)
 target_link_libraries(RenegadeScreenClickSoundTests PRIVATE Renegade::RuntimeBootstrap)
 set_target_properties(RenegadeScreenClickSoundTests PROPERTIES FOLDER "Renegade/Tests")
 add_test(NAME RenegadeScreenClickSoundTests COMMAND RenegadeScreenClickSoundTests)
+add_dependencies(RenegadeBridgeTests RenegadeScreenClickSoundTests)
 
 add_executable(RenegadeWeatherLuaRuntimeTests WeatherLuaRuntimeTests.cpp)
 target_link_libraries(RenegadeWeatherLuaRuntimeTests PRIVATE Renegade::RuntimeBootstrap)
