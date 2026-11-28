@@ -1,6 +1,7 @@
 #pragma once
 
 #include "RuntimeCharacterPerception.h"
+#include "renegade/bridge/ScreenHurtFeedback.h"
 #include "RuntimeCharacterSystem.h"
 #include "renegade/bridge/GameplayEventService.h"
 #include "renegade/bridge/WeaponCombatService.h"
@@ -51,6 +52,7 @@ namespace renegade::runtime
 
     struct RuntimeCombatState
     {
+        bridge::PlayerHurtFeedbackSession hurt;
         bool playerMeleeGuard=false;
         XMFLOAT3 guardFacing={};
         std::vector<CharacterCombatRecord> characters;
@@ -370,7 +372,7 @@ namespace renegade::runtime
         RuntimeCombatState& state,
         const std::string& targetId,
         const float amount,
-        bool& died) noexcept
+        bool& died,std::optional<float> sourceBearing={}) noexcept
     {
         died = false;
         if (!std::isfinite(amount) || amount <= 0.0f)
@@ -379,6 +381,7 @@ namespace renegade::runtime
         {
             if (state.playerDead)
                 return false;
+            state.hurt.Damage(std::min(amount,state.playerHealth),state.playerMaxHealth,sourceBearing);
             state.playerHealth = std::max(0.0f, state.playerHealth - amount);
             state.playerDead = state.playerHealth <= 0.0f;
             died = state.playerDead;
@@ -481,7 +484,7 @@ namespace renegade::runtime
         result.damage = combat.weapon.damage;
         bool died = false;
         if (ApplyCombatDamage(
-                scene, state, RuntimePlayerKnowledgeId, result.damage, died))
+                scene, state, RuntimePlayerKnowledgeId, result.damage, died,float(std::atan2(-dx,-dz)*180/3.141592653589793)))
         {
             result.targetDied = died;
             ++combat.shotsHit;

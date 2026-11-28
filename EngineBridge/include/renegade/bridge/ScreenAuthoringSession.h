@@ -408,6 +408,15 @@ namespace renegade::bridge
             return CommitMutation(std::move(candidate),error);
         }
 
+        bool ConfigureHurtFeedback(const StableId& id,ScreenHurtFeedback config,std::string& error)
+        {
+            auto d=Document();for(auto& w:d.widgets)if(w.id==id){
+                if(w.kind!=ScreenWidgetKind::Image||!ValidateHurtFeedback(config,error))return false;
+                w.hurt=std::move(config);if(w.component)w.component->overrides|=512;
+                if(d.schemaVersion<3){d.migratedFromVersion=d.schemaVersion;d.schemaVersion=3;}
+                return CommitMutation(std::move(d),error);
+            }error="Select a hurt feedback layer.";return false;
+        }
         bool ConfigureNavigationComponent(const StableId&,const ScreenWidget&,std::string& error);
         bool ConfigureNavigation(const StableId&,std::optional<ScreenNavigation>,std::string& error);
         bool ApplyNavigationAppearance(const StableId&,const ScreenWidget&,std::string& error,bool keepAssignedIcons=true);

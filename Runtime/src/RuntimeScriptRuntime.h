@@ -1,6 +1,7 @@
 #include "renegade/bridge/WorldLocationService.h"
 #include "renegade/bridge/WorldNavigationService.h"
 #pragma once
+#include "renegade/bridge/HurtFeedbackService.h"
 
 #include "renegade/bridge/ScriptDocumentService.h"
 #include "renegade/bridge/GameplayInputService.h"
@@ -75,6 +76,8 @@ namespace renegade::runtime
         // scripts read this state through governed player/input namespaces;
         // they never poll Wicked's global input or receive raw ECS handles.
         bridge::WorldNavigationService& Navigation();
+        bridge::HurtFeedbackService& HurtFeedback();
+        void SetHurtFeedbackApi(std::function<bool(float,std::optional<float>,std::string&)>,std::function<void()>);
         bridge::WorldLocationService& Locations();
         void ResolveNavigationEntities();
 

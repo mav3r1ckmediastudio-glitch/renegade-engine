@@ -1,6 +1,7 @@
 #include "renegade/bridge/WorldNavigationService.h"
 #include "renegade/bridge/WorldLocationService.h"
 #pragma once
+#include "renegade/bridge/HurtFeedbackService.h"
 
 #include "renegade/bridge/ScreenService.h"
 #include "renegade/bridge/ScreenAccessibility.h"
@@ -171,6 +172,8 @@ namespace renegade::screen
             const bridge::StableId& trackId,float position,float fraction);
         const bridge::ScreenWidget* NavigationPrototype(const bridge::StableId&)const;
         bool PreviewNavigationDraft(const bridge::StableId&,const bridge::ScreenNavigation&,float heading,std::string& error,const bridge::ScreenWidget* appearance=nullptr);
+        bool SetHurtFeedbackState(const bridge::HurtFeedbackSnapshot&,bool includeCreated,bool allowAudio,std::string& error);
+        void PreviewHurtFeedback(const bridge::StableId&,const bridge::HurtFeedbackFrame&,bool audio=false);
         void SetLocationAnnouncement(const std::optional<bridge::LocationAnnouncementFrame>&);
         bool SetNavigationState(const bridge::WorldNavigationSnapshot&,bool includeCreated,std::string& error);
         void SetWidgetFill(const bridge::StableId& widgetId, float fill);

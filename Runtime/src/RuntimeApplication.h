@@ -107,6 +107,8 @@ namespace renegade::runtime
         void SetBastionReticles(std::optional<XMFLOAT2> aim, std::optional<XMFLOAT2> barrel)
         { bastionAim_ = aim; bastionBarrel_ = barrel; }
         void SetProjectileContacts(std::vector<XMFLOAT2> contacts) { projectileContacts_=std::move(contacts); }
+        void SetHurtCameraShake(XMFLOAT2 offset){hurtShake_=offset;}
+        void RestoreHurtCamera();
         void ConfirmTargetHit() { hitConfirmSeconds_=0.12f; }
         void ClearHitConfirmation() { hitConfirmSeconds_=0; }
         void SetHeldFireballParticles(const std::array<wi::ecs::Entity,4>& entities) { heldFireballParticles_=entities; }
@@ -119,6 +121,7 @@ namespace renegade::runtime
         void Compose(wi::graphics::CommandList cmd) const override;
 
     private:
+        XMFLOAT2 hurtShake_={};XMFLOAT4X4 hurtCameraPose_={};bool hurtCameraApplied_=false;
         bridge::RiverUnderwaterRenderer riverUnderwater_;
         bridge::RiverFlowRenderer riverFlow_;
         bridge::PlaceableWaterfallRenderer waterfallRenderer_;
@@ -251,6 +254,7 @@ namespace renegade::runtime
         void RefreshUiBindingSources();
         void UpdateUiBindings();
         void UpdateWorldNavigation(float dt);
+        void UpdateHurtFeedback(float dt);
         bool SetWorldMapOpen(bool open,std::string& error);
         RuntimeHudSession worldMapOverlay_;
         bool worldMapOpen_=false,worldMapWasPaused_=false,worldMapCloseRequested_=false;

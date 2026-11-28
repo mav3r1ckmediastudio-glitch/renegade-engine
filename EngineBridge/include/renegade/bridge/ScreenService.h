@@ -1,4 +1,5 @@
 #pragma once
+#include "renegade/bridge/ScreenHurtFeedback.h"
 
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ScreenBinding.h"
@@ -320,6 +321,7 @@ namespace renegade::bridge
         std::string progressFrameResourcePath;
         std::string progressFillResourcePath;
         std::optional<ScreenLiquid> liquid;
+        std::optional<ScreenHurtFeedback> hurt;
         std::optional<ScreenNavigation> navigation;
         // Additive v3 contract. Free preserves existing absolute/anchor semantics.
         // Flow containers allocate equal cells to immediate children in paint order.

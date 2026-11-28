@@ -2,6 +2,7 @@
 #include "renegade/bridge/WorldLocationService.h"
 #include "ScreenNavigationEditor.h"
 #include "ScreenMinimapEditor.h"
+#include "ScreenHurtEditor.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/ScreenClickSound.h"
@@ -125,6 +126,7 @@ namespace renegade::studio
         carouselEditor_->Create();
         liquidEditor_=std::make_shared<ScreenLiquidEditor>();liquidEditor_->Create();
         navigationEditor_=std::make_shared<ScreenNavigationEditor>();navigationEditor_->Create();
+        hurtEditor_=std::make_shared<ScreenHurtEditor>();hurtEditor_->Create();
         minimapEditor_=std::make_shared<ScreenMinimapEditor>();minimapEditor_->Create();
         SetName("Renegade Screen Editor workspace");
         SetShadowRadius(0.0f);
@@ -177,6 +179,7 @@ namespace renegade::studio
         if(carouselEditor_)carouselEditor_->Close();
         if(liquidEditor_)liquidEditor_->Close();liquidEditorOpen_=false;
         if(navigationEditor_)navigationEditor_->Close();navigationEditorOpen_=false;
+        if(hurtEditor_)hurtEditor_->Close();hurtEditorOpen_=false;
         if(minimapEditor_)minimapEditor_->Close();minimapEditorOpen_=false;
         carouselEditorOpen_=false;
         session_ = nullptr;
@@ -771,6 +774,8 @@ namespace renegade::studio
             "Edit colours, visual states, typography and resource bindings.");
         appearanceButton_.OnClick([this](const wi::gui::EventArgs&)
         {
+            const auto* selected=session_?session_->FindWidget(selectedWidgetId_):nullptr;
+            if(selected&&selected->hurt){OpenHurtEditor();return;}
             if (appearanceRequested_) appearanceRequested_();
         });
         imageAssetButton_.Create("Screen Image Asset Browser");
@@ -782,6 +787,7 @@ namespace renegade::studio
         imageAssetButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             const auto* selected=session_ ? session_->FindWidget(selectedWidgetId_) : nullptr;
+            if(selected&&selected->hurt){OpenHurtEditor();return;}
             if(selected&&selected->navigation){OpenNavigationEditor();return;}
             if(FindSelectedLiquid()){OpenLiquidEditor();return;}
             if (selected && selected->carousel)
@@ -1220,6 +1226,7 @@ namespace renegade::studio
         imageAssetButton_.SetText(selectedReady && selected->kind==bridge::ScreenWidgetKind::Text ? "Hint list..." : selectedReady && selected->carousel ? "Edit carousel..." : background ? "Add file..." : selectedReady && selected->video ? "Choose video..." : "CHANGE GRAPHIC");
         if(FindSelectedLiquid()){imageAssetButton_.SetText("Fill settings...");imageAssetButton_.SetTooltip("Edit this Progress layer: mask, fill direction, colour, animation, sounds and gameplay binding.");}
         else imageAssetButton_.SetTooltip("Choose content or settings for this selected layer.");
+        if(selectedReady&&selected->hurt){imageAssetButton_.SetText("Hurt feedback settings...");imageAssetButton_.SetTooltip("Edit hit, direction, low health, custom art/sounds and optional camera shake. Preview each effect here.");}
         if(selectedReady&&selected->navigation){imageAssetButton_.SetText("Navigation settings...");imageAssetButton_.SetTooltip("Edit heading, visible span, world targets and appearance. Scripts can control the same component.");}
         imageAssetButton_.SetVisible(!button && selectedReady && !selected->carouselCaption && !focusCanvas_ && !rightCollapsed_ &&
             !inspectorSuppressed_);
@@ -1655,7 +1662,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::HandleUndoRedoShortcuts()
     {
-        if(carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_||minimapEditorOpen_)return;
+        if(hurtEditorOpen_||carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_||minimapEditorOpen_)return;
         if (!session_ || !session_->IsLoaded() ||
             directManipulationMode_ != DirectManipulationMode::None ||
             panelDrag_ != PanelDrag::None)
@@ -1683,7 +1690,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::HandleDeleteShortcut()
     {
-        if(carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_||minimapEditorOpen_)return;
+        if(hurtEditorOpen_||carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_||minimapEditorOpen_)return;
         if (!session_ || !session_->IsLoaded() ||
             session_->FindWidget(selectedWidgetId_) == nullptr ||
             directManipulationMode_ != DirectManipulationMode::None ||
@@ -1698,7 +1705,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::HandleLayerOrderShortcuts()
     {
-        if(carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_||minimapEditorOpen_)return;
+        if(hurtEditorOpen_||carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_||minimapEditorOpen_)return;
 #if defined(_WIN32)
         if (!session_ || !session_->IsLoaded() ||
             session_->FindWidget(selectedWidgetId_) == nullptr ||
@@ -2449,8 +2456,9 @@ namespace renegade::studio
     void RenegadeScreenEditorWorkspace::Update(const wi::Canvas& canvas,const float dt)
     {
         if (!IsVisible() || !IsEnabled())
-        {if(minimapEditor_&&minimapEditorOpen_)minimapEditor_->Close();if(navigationEditor_&&navigationEditorOpen_)navigationEditor_->Close();if(carouselEditor_&&carouselEditorOpen_)carouselEditor_->Close();if(liquidEditor_&&liquidEditorOpen_)liquidEditor_->Close();return;}
+        {if(hurtEditor_&&hurtEditorOpen_)hurtEditor_->Close();if(minimapEditor_&&minimapEditorOpen_)minimapEditor_->Close();if(navigationEditor_&&navigationEditorOpen_)navigationEditor_->Close();if(carouselEditor_&&carouselEditorOpen_)carouselEditor_->Close();if(liquidEditor_&&liquidEditorOpen_)liquidEditor_->Close();return;}
         Widget::Update(canvas,dt);
+        if(hurtEditor_&&hurtEditor_->IsVisible()){hurtEditor_->Update(canvas,dt);return;}
         if(minimapEditor_&&minimapEditor_->IsVisible()){minimapEditor_->Update(canvas,dt);return;}
         if(navigationEditor_&&navigationEditor_->IsVisible())
         {navigationEditor_->Update(canvas,dt);return;}
@@ -2465,6 +2473,7 @@ namespace renegade::studio
         if (basicActionPicker_.IsOpen()) { basicActionPicker_.Update(); return; }
         if (destinationPicker_.IsOpen()) { destinationPicker_.Update(); return; }
         UpdateControls(canvas,dt);
+        if(hurtEditor_&&hurtEditor_->IsVisible()){hurtEditor_->Update(canvas,dt);return;}
         if(minimapEditor_&&minimapEditor_->IsVisible()){minimapEditor_->Update(canvas,dt);return;}
         if(navigationEditor_&&navigationEditor_->IsVisible())
         {navigationEditor_->Update(canvas,dt);return;}
@@ -2884,6 +2893,7 @@ namespace renegade::studio
         if(carouselEditor_&&carouselEditor_->IsVisible())carouselEditor_->Render(canvas,cmd);
         if(liquidEditor_&&liquidEditor_->IsVisible())liquidEditor_->Render(canvas,cmd);
         if(navigationEditor_&&navigationEditor_->IsVisible())navigationEditor_->Render(canvas,cmd);
+        if(hurtEditor_&&hurtEditor_->IsVisible())hurtEditor_->Render(canvas,cmd);
         if(minimapEditor_&&minimapEditor_->IsVisible())minimapEditor_->Render(canvas,cmd);
     }
 }
@@ -3085,6 +3095,13 @@ namespace renegade::studio
                 widget.rect.x=std::max(12.f,session_->Document().designWidth-304.f);
                 if(!session_->CreateWidget(std::move(widget),false,created,error)){SetStatus(error);break;}
                 SelectWidget(created);RefreshAfterMutation("MINIMAP CREATED // STYLE / FONT OPENS MAP SETTINGS");break;
+            }
+            case ScreenToolboxAction::PlayerHurt:
+            {
+                auto widget=bridge::MakePlayerHurtWidget(session_->Document().designWidth,session_->Document().designHeight);
+                bridge::StableId created;std::string error;
+                if(!session_->CreateWidget(std::move(widget),false,created,error)){SetStatus(error);break;}
+                SelectWidget(created);RefreshAfterMutation("PLAYER HURT FEEDBACK CREATED // OPEN SETTINGS TO CUSTOMISE");OpenHurtEditor();break;
             }
             case ScreenToolboxAction::AmmoCounter:
             {
@@ -3610,7 +3627,7 @@ namespace renegade::studio
     }
     void RenegadeScreenEditorWorkspace::HandleSelectionShortcuts()
     {
-        if(carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_||minimapEditorOpen_)return;
+        if(hurtEditorOpen_||carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_||minimapEditorOpen_)return;
         if(!session_||!session_->IsLoaded()||directManipulationMode_!=DirectManipulationMode::None||
             panelDrag_!=PanelDrag::None||!layerDragId_.empty())return;
         const bool ctrl=wi::input::Down(wi::input::KEYBOARD_BUTTON_LCONTROL)||
@@ -3850,5 +3867,18 @@ namespace renegade::studio
                 return renderer_->PreviewNavigationDraft(id,*draft.navigation,heading,error,&draft);
             });
         navigationEditorOpen_=true;
+    }
+}
+
+namespace renegade::studio
+{
+    void RenegadeScreenEditorWorkspace::OpenHurtEditor()
+    {
+        const auto* selected=session_?session_->FindWidget(selectedWidgetId_):nullptr;if(!selected||!selected->hurt)return;
+        const auto id=selected->id,document=session_->Document().envelope.documentId,root=gridProjectRoot_;
+        hurtEditor_->Open(*selected->hurt,root,session_->ProjectId(),[this,id,document,root](bridge::ScreenHurtFeedback config,std::string& error){
+            if(!session_||!session_->IsLoaded()||gridProjectRoot_!=root||session_->Document().envelope.documentId!=document){error="The original HUD is no longer open.";return false;}
+            if(!session_->ConfigureHurtFeedback(id,std::move(config),error))return false;RefreshAfterMutation("Player hurt feedback saved");return true;
+        },[this]{hurtEditorOpen_=false;if(documentChanged_)documentChanged_();});hurtEditorOpen_=true;
     }
 }

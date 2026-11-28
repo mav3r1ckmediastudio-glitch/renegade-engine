@@ -17,7 +17,7 @@ namespace renegade::studio
     {
         None, StoryFlow, Text, Button, Image, Video, Carousel, Background,
         Panel, Heading, Duplicate, Grid, Snap, Progress, GlobalHud, ProjectInventory,
-        Icon, Divider, Spacer, Counter, PlayerHealthBar, PlayerHealthText, PlayerAmmoText, Group, HorizontalStack, VerticalStack, LayoutGrid, Toggle, Slider, Selector, TextInput, GameplayAttributes, PublishUiPackage, AdoptUiPackage, UiBudgets, SaveUiPrefab, InsertUiPrefab, AnimatedVial, LiquidFill, WorldNavigation, LocationAnnouncement, AmmoCounter, Minimap
+        Icon, Divider, Spacer, Counter, PlayerHealthBar, PlayerHealthText, PlayerAmmoText, Group, HorizontalStack, VerticalStack, LayoutGrid, Toggle, Slider, Selector, TextInput, GameplayAttributes, PublishUiPackage, AdoptUiPackage, UiBudgets, SaveUiPrefab, InsertUiPrefab, AnimatedVial, LiquidFill, WorldNavigation, LocationAnnouncement, AmmoCounter, Minimap, PlayerHurt
     };
 
     struct ScreenEditorLibraryScreen
@@ -73,6 +73,7 @@ namespace renegade::studio
             {"COMBAT", "Health bar - current Player", ScreenToolboxAction::PlayerHealthBar},
             {"COMBAT", "Health text - current Player", ScreenToolboxAction::PlayerHealthText},
             {"COMBAT", "Ammo counter - equipped weapon", ScreenToolboxAction::AmmoCounter},
+            {"COMBAT", "Player hurt feedback", ScreenToolboxAction::PlayerHurt},
             {"COMBAT", "Loaded ammo text - current Player", ScreenToolboxAction::PlayerAmmoText},
             {"EQUIPMENT", "Equipped item"}, {"EQUIPMENT", "Ability slots"},
             {"INVENTORY", "Inventory slots"}, {"PROGRESSION", "Experience"},
@@ -93,6 +94,7 @@ namespace renegade::studio
             {"BASIC", "Location name", ScreenToolboxAction::LocationAnnouncement},
             {"BASIC", "Ammo counter", ScreenToolboxAction::AmmoCounter},
             {"BASIC", "Minimap", ScreenToolboxAction::Minimap},
+            {"BASIC", "Player hurt feedback", ScreenToolboxAction::PlayerHurt},
             {"BASIC", "Add background panel", ScreenToolboxAction::Background},
             {"BASIC", "Icon", ScreenToolboxAction::Icon}, {"BASIC", "Divider", ScreenToolboxAction::Divider}, {"BASIC", "Spacer", ScreenToolboxAction::Spacer},
             {"LAYOUT", "Group", ScreenToolboxAction::Group}, {"LAYOUT", "Horizontal Stack", ScreenToolboxAction::HorizontalStack},

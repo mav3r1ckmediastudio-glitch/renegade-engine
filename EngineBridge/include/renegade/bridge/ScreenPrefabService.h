@@ -33,6 +33,7 @@ namespace renegade::bridge
             for(const auto* v:{&w.style.normal,&w.style.hover,&w.style.pressed,&w.style.focused,&w.style.disabled})add(v->imageResourcePath);
             if(w.carousel)for(const auto& slide:w.carousel->entries)add(slide.image);
             if(w.navigation)for(const auto* path:NavigationResources(*w.navigation))add(*path);
+            if(w.hurt)for(const auto& f:HurtResources())add((*w.hurt).*(f.member));
             if(w.liquid){add(w.liquid->mask);add(w.liquid->increaseSound);add(w.liquid->decreaseSound);}
         }
         // Publish compact resource names so saving an imported prefab cannot
@@ -48,6 +49,7 @@ namespace renegade::bridge
             for(auto* v:{&w.style.normal,&w.style.hover,&w.style.pressed,&w.style.focused,&w.style.disabled})remap(v->imageResourcePath);
             if(w.carousel)for(auto& slide:w.carousel->entries)remap(slide.image);
             if(w.navigation)for(auto* path:NavigationResources(*w.navigation))remap(*path);
+            if(w.hurt)for(const auto& f:HurtResources())remap((*w.hurt).*(f.member));
             if(w.liquid){remap(w.liquid->mask);remap(w.liquid->increaseSound);remap(w.liquid->decreaseSound);}
         }
         if(!ValidateScreenDocument(doc,session.ProjectId(),error))return false;

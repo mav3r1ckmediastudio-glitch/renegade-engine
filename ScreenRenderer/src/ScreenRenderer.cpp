@@ -193,6 +193,7 @@ namespace
 
         #include "ScreenNavigationDrawing.inl"
         #include "ScreenMinimapDrawing.inl"
+        #include "ScreenHurtDrawing.inl"
         std::optional<renegade::bridge::LocationAnnouncementFrame> locationFrame;
         bool locationReducedMotion=false;
 
@@ -422,6 +423,7 @@ namespace
             const auto interaction = Interaction();
             auto style = renegade::bridge::ResolveAccessibleScreenStyle(authored.style,authored.kind,accessibility);
             if(locationFrame)style.opacity*=locationSample.opacity;
+            if(authored.hurt){DrawHurtFeedback(canvas,cmd,style);return;}
             if(authored.navigation&&authored.navigation->minimap){DrawMinimap(canvas,cmd,clipped,style);return;}
             const auto& visual = SelectVisual(style, interaction);
             const float geometryScale = std::min(scaleX, scaleY);
@@ -976,7 +978,8 @@ namespace renegade::screen
         std::unordered_map<bridge::StableId, ScreenSurface*> byId;
         std::map<bridge::StableId,bridge::ScreenWidget> navigationOriginal;
         std::map<bridge::StableId,bool> navigationVisibility,navigationBindingVisibility;
-        std::set<bridge::StableId> navigationDynamic;
+        std::set<bridge::StableId> navigationDynamic,hurtDynamic;
+        std::uint64_t hurtRevision=UINT64_MAX;
         std::set<std::string> navigationGlobalArtwork;
         std::uint64_t navigationRevision=UINT64_MAX;
 
@@ -1152,6 +1155,7 @@ namespace renegade::screen
                 impl_->inputEnabled &&
                 bridge::IsScreenInteractive(widget.kind) && widget.enabled);
             surface->SetText(widget.text);
+            if(widget.hurt&&!surface->LoadHurtArtwork(projectRoot,error)){Reset(renderPath);return false;}
             if(widget.navigation){impl_->navigationOriginal[widget.id]=widget;if(!surface->LoadNavigationArtwork(projectRoot,error)){Reset(renderPath);return false;}}
             ConfigureScreenMedia(*surface,widget,projectRoot,document.envelope.projectId);
             surface->SetShadowRadius(0.0f);
@@ -1866,6 +1870,7 @@ namespace renegade::screen
         impl_->surfaces.clear();
         impl_->byId.clear();
         impl_->navigationVisibility.clear();impl_->navigationBindingVisibility.clear();
+        impl_->hurtDynamic.clear();impl_->hurtRevision=UINT64_MAX;
         impl_->navigationOriginal.clear();impl_->navigationDynamic.clear();impl_->navigationGlobalArtwork.clear();impl_->navigationRevision=UINT64_MAX;
         impl_->logicalRects.clear();
         impl_->scrollThumbs.clear();
@@ -2050,5 +2055,52 @@ namespace renegade::screen
                 }
             }
         }
+    }
+}
+
+namespace renegade::screen
+{
+    void ScreenRenderer::PreviewHurtFeedback(const bridge::StableId& id,const bridge::HurtFeedbackFrame& frame,bool audio)
+    {
+        const auto i=impl_->byId.find(id);if(i!=impl_->byId.end()){i->second->hurtReduced=impl_->animation.reducedMotion;i->second->SetHurtFrame(frame,impl_->projectRoot,audio);}
+    }
+    bool ScreenRenderer::SetHurtFeedbackState(const bridge::HurtFeedbackSnapshot& state,bool includeCreated,bool allowAudio,std::string& error)
+    {
+        if(!impl_->loaded)return true;
+        if(impl_->hurtRevision!=state.revision){
+        std::vector<bridge::StableId> retired;for(const auto& id:impl_->hurtDynamic)if(!state.views.count(id)||!includeCreated)retired.push_back(id);
+        for(const auto& id:retired){
+            auto* ptr=impl_->byId.at(id);auto& roots=impl_->root.surfaces;roots.erase(std::remove(roots.begin(),roots.end(),ptr),roots.end());
+            impl_->surfaces.erase(std::remove_if(impl_->surfaces.begin(),impl_->surfaces.end(),[&](const auto& p){return p.get()==ptr;}),impl_->surfaces.end());
+            auto& widgets=impl_->document.widgets;widgets.erase(std::remove_if(widgets.begin(),widgets.end(),[&](const auto& w){return w.id==id;}),widgets.end());
+            impl_->byId.erase(id);impl_->logicalRects.erase(id);impl_->hurtDynamic.erase(id);impl_->layoutDirty=true;
+        }
+        for(const auto& [id,view]:state.views){
+            auto old=impl_->byId.find(id);
+            if(view.authored&&old==impl_->byId.end())continue;
+            if(!view.authored&&!includeCreated)continue;
+            if(old==impl_->byId.end()){
+                auto surface=std::make_unique<ScreenSurface>();surface->Create(view.widget.name+"#"+id);surface->authored=view.widget;
+                surface->SetShadowRadius(0);surface->SetEnabled(false);surface->SetVisible(view.widget.visible);
+                if(!surface->LoadHurtArtwork(impl_->projectRoot,error))return false;
+                auto* ptr=surface.get();impl_->document.widgets.push_back(surface->authored);impl_->root.surfaces.push_back(ptr);
+                impl_->byId[id]=ptr;impl_->hurtDynamic.insert(id);impl_->surfaces.push_back(std::move(surface));impl_->layoutDirty=true;old=impl_->byId.find(id);
+            }
+            auto& surface=*old->second;
+            auto before=surface.authored.hurt;surface.authored.hurt=view.widget.hurt;
+            if(!surface.LoadHurtArtwork(impl_->projectRoot,error)){surface.authored.hurt=before;return false;}
+            surface.authored.rect=view.widget.rect;surface.authored.style.opacity=view.widget.style.opacity;
+            for(auto& widget:impl_->document.widgets)if(widget.id==id){widget.hurt=surface.authored.hurt;widget.rect=surface.authored.rect;widget.style.opacity=surface.authored.style.opacity;break;}
+            impl_->layoutDirty=true;
+        }
+        impl_->hurtRevision=state.revision;
+        }
+        for(auto& surface:impl_->surfaces)if(surface->authored.hurt){
+            surface->hurtReduced=impl_->animation.reducedMotion;
+            const auto view=state.views.find(surface->authored.id);
+            if(view==state.views.end()){auto empty=state.frame;empty.available=false;surface->SetHurtFrame(empty,impl_->projectRoot,false);continue;}
+            surface->SetHurtFrame(state.frame,impl_->projectRoot,allowAudio);
+        }
+        error.clear();return true;
     }
 }

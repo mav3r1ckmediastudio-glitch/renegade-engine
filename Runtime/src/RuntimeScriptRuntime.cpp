@@ -230,6 +230,8 @@ namespace renegade::runtime
         std::function<bridge::InventoryGameplayGateway*(
             const bridge::StableId&, const bridge::StableId&)> inventoryGatewayProvider;
         RuntimeDialogueScriptApi dialogueApi;
+        bridge::HurtFeedbackService hurtFeedback;
+        std::function<bool(float,std::optional<float>,std::string&)> hurtPulse;std::function<void()> hurtClear;
         std::function<bool(bool,std::string&)> worldMapSet;
         std::function<bool()> worldMapGet;
         std::function<bridge::PlayerWeaponAmmo()> weaponAmmoProvider;
@@ -850,6 +852,7 @@ namespace renegade::runtime
 
         #include "RuntimeParticleLua.inl"
         #include "RuntimeNavigationLua.inl"
+        #include "RuntimeHurtLua.inl"
         #include "RuntimeLocationLua.inl"
 
         bool IsScriptedFlightPilot(lua_State* state)
@@ -1820,7 +1823,7 @@ namespace renegade::runtime
             lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,LightSetStateLua,1);lua_setfield(lua,-2,"set_state");
             lua_setfield(lua,-2,"light");
             RegisterParticleLua();
-            RegisterNavigationLua();RegisterLocationLua();RegisterMinimapLua();RegisterWorldMapLua();
+            RegisterNavigationLua();RegisterLocationLua();RegisterMinimapLua();RegisterWorldMapLua();RegisterHurtLua();
 
             lua_newtable(lua);
             lua_pushlightuserdata(lua, this);
@@ -2640,7 +2643,7 @@ namespace renegade::runtime
                 projectRoot.clear();
                 running = false;
                 paused = false;
-                navigation.Reset();locations.Reset();
+                navigation.Reset();hurtFeedback.Reset();locations.Reset();
                 return;
             }
             if (running)
@@ -2665,7 +2668,7 @@ namespace renegade::runtime
                 ++generation;
             running = false;
             paused = false;
-            navigation.Reset();locations.Reset();
+            navigation.Reset();hurtFeedback.Reset();locations.Reset();
         }
 
         void Shutdown() noexcept
@@ -3057,3 +3060,7 @@ namespace renegade::runtime
 {
     bridge::WorldLocationService& RuntimeScriptRuntime::Locations(){return impl_->locations;}
 }
+
+namespace renegade::runtime {bridge::HurtFeedbackService& RuntimeScriptRuntime::HurtFeedback(){return impl_->hurtFeedback;}}
+
+namespace renegade::runtime {void RuntimeScriptRuntime::SetHurtFeedbackApi(std::function<bool(float,std::optional<float>,std::string&)> hit,std::function<void()> clear){impl_->hurtPulse=std::move(hit);impl_->hurtClear=std::move(clear);}}

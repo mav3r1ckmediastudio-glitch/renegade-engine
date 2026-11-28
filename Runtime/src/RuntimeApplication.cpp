@@ -158,6 +158,7 @@ namespace renegade::runtime
 
     void RuntimeRenderPath::Update(const float dt)
     {
+        RestoreHurtCamera();
         // Story Flow can replace the active WISCENE without recreating this
         // render path. SceneService exposes that lifecycle explicitly, so a
         // normal frame performs only an O(1) revision check and never repeats
@@ -232,7 +233,8 @@ namespace renegade::runtime
             ThunderAudio().Update(paused_ ? 0.0f : dt, camera->Eye, camera->At);
         if(scene)RecordWeatherDiagnostic(*scene,dt);
         const auto nativeBegin=std::chrono::steady_clock::now();
-        {auto riverBindings=riverFlow_.Bind();bridge::UpdateParticleEffectSprites(*scene,paused_?0.0f:dt);RenderPath3D::Update(dt);}
+        {auto riverBindings=riverFlow_.Bind();bridge::UpdateParticleEffectSprites(*scene,paused_?0.0f:dt);
+            RenderPath3D::Update(dt);}
         if(const char* trace=std::getenv("RENEGADE_G13E14_STAGE_TRACE")){
             static std::uint64_t frame=0;
             if(++frame<=20 || frame%10==0){
@@ -302,6 +304,15 @@ namespace renegade::runtime
     void RuntimeRenderPath::PreRender()
     {
         if (!SceneReadyForRender()) return;
+        // The player/vehicle camera is sampled after the scene's physics step.
+        // Add presentation shake only now, after aiming/gameplay has finished,
+        // and before visibility and render constants consume the final camera.
+        RestoreHurtCamera();
+        if(!paused_&&camera&&(hurtShake_.x!=0||hurtShake_.y!=0)){
+            hurtCameraPose_=camera->InvView;auto pose=camera->GetInvView();
+            pose.r[3]+=XMVector3TransformNormal(XMVectorSet(hurtShake_.x,hurtShake_.y,0,0),pose);
+            camera->TransformCamera(pose);camera->UpdateCamera();hurtCameraApplied_=true;
+        }
         riverUnderwater_.Update(*this);
         auto riverBindings=riverFlow_.Bind();
         wi::RenderPath3D::PreRender();
@@ -819,6 +830,7 @@ namespace renegade::runtime
         if (pendingLevelLoad_) { UpdateLoadingScreen(dt); return; }
         if (directLevelWon_ && wi::input::Press(wi::input::KEYBOARD_BUTTON_ENTER))
             quitRequested_ = true;
+        renderer_.RestoreHurtCamera();
         SyncPlayerForScene();
         static RuntimeVehicleTrial vehicleTrial;
         vehicleTrial.RestoreCockpitProjection(renderer_.camera);
@@ -1161,6 +1173,7 @@ namespace renegade::runtime
         const auto bindingStart=std::chrono::steady_clock::now();
         UpdateUiBindings();
         UpdateWorldNavigation(dt);
+        UpdateHurtFeedback(dt);
         if(screenPresenter_->IsLoaded()||hudSession_.IsLoaded())
         {
             const auto elapsed=std::chrono::duration_cast<std::chrono::microseconds>(
@@ -2239,6 +2252,7 @@ namespace renegade::runtime
         if (playerSceneRevision_ == scenes_.Revision())
             return;
 
+        combatState_.hurt.Reset();renderer_.SetHurtCameraShake({});
         player_ = {};
         playerViewRig_ = {};
         playerViewAnimation_ = {};
@@ -3824,6 +3838,10 @@ namespace renegade::runtime
             return creatorScripts_.EnqueueGameplayEvent(std::move(event), error);
         });
         creatorScripts_.SetDialogueApi(dialogue_.ScriptApi(scenes_.GetScene(), renderer_));
+        creatorScripts_.SetHurtFeedbackApi([this](float amount,std::optional<float> bearing,std::string& error){
+            if(!player_.IsSpawned()||combatState_.playerDead){error="No live player for hurt feedback.";return false;}
+            combatState_.hurt.Damage(amount,combatState_.playerMaxHealth,bearing);return true;
+        },[this]{combatState_.hurt.Reset();});
         creatorScripts_.SetWorldMapApi([this](bool open,std::string& error){return SetWorldMapOpen(open,error);},[this]{return worldMapOpen_;});
         creatorScripts_.SetWeaponAmmoProvider([this]{
             if(!player_.IsSpawned())return bridge::PlayerWeaponAmmo{};
@@ -3907,6 +3925,7 @@ namespace renegade::runtime
 
     void RuntimeApplication::StopCreatorScripts() noexcept
     {
+        creatorScripts_.SetHurtFeedbackApi({},{});
         worldMapOverlay_.Reset(renderer_);worldMapOpen_=false;worldMapCloseRequested_=false;
         minimapCameras_.Reset(scenes_.GetScene());actorNavigationTargets_.clear();
         if (creatorScripts_.IsRunning())
@@ -4211,6 +4230,7 @@ namespace renegade::runtime
             wi::physics::SetPosition(*body,position);
         player_.yaw=state.playerYaw;player_.pitch=state.playerPitch;
         dialogue_.Memory()=std::move(restoredDialogue);
+        combatState_.hurt.Reset();
         combatState_.playerHealth=state.playerHealth;
         combatState_.playerMaxHealth=state.playerMaxHealth;
         combatState_.playerDead=state.playerDead;
@@ -4707,7 +4727,7 @@ namespace renegade::runtime
             if (enter && !c.suppressArrival) {
                 if (z.mode==1) ApplyZoneHealth(-combatState_.playerHealth);
                 else if (MovePlayerToZone(effects.checkpoint.value_or(ZonePose{player_.spawnPosition,0}),error)) {
-                    combatState_.playerDead=false; combatState_.playerHealth=combatState_.playerMaxHealth;
+                    combatState_.hurt.Reset();combatState_.playerDead=false; combatState_.playerHealth=combatState_.playerMaxHealth;
                 }
             }
             break;
@@ -4806,7 +4826,7 @@ namespace renegade::runtime
             std::string error;
             if (MovePlayerToZone(*e.checkpoint,error)) {
                 combatState_.playerHealth=combatState_.playerMaxHealth;
-                combatState_.playerDead=false;
+                combatState_.hurt.Reset();combatState_.playerDead=false;
             }
         }
         e.messages.erase(std::remove_if(e.messages.begin(),e.messages.end(),[&](auto& m){
@@ -5194,5 +5214,37 @@ namespace renegade::runtime
         doc.widgets={backing,map,title,close};doc.actions.push_back({close.actionId});doc.focusOrder={close.id};
         if(!worldMapOverlay_.Load(doc,startupResult_.project.rootPath,renderer_,[this](RuntimeActionRequest request){if(request.actionId=="ui.map.close")worldMapCloseRequested_=true;},error,uiAccessibility_.reducedMotion,uiAccessibility_.presentation))return false;
         worldMapWasPaused_=manualPauseRequested_;worldMapOpen_=true;worldMapCloseRequested_=false;SetPaused(true);wi::input::HidePointer(false);error.clear();return true;
+    }
+}
+
+namespace renegade::runtime
+{
+    void RuntimeRenderPath::RestoreHurtCamera()
+    {
+        if(hurtCameraApplied_&&camera){camera->TransformCamera(XMLoadFloat4x4(&hurtCameraPose_));camera->UpdateCamera();}
+        hurtCameraApplied_=false;
+    }
+    void RuntimeApplication::UpdateHurtFeedback(float dt)
+    {
+        const float heading=renderer_.camera?float(std::atan2(renderer_.camera->At.x,renderer_.camera->At.z)*180/3.141592653589793):0;
+        combatState_.hurt.Tick(paused_?0:dt,player_.IsSpawned(),!combatState_.playerDead,combatState_.playerHealth,combatState_.playerMaxHealth,heading);
+        auto& service=creatorScripts_.HurtFeedback();std::set<bridge::StableId> active;
+        const auto observe=[&](const RuntimeScreenController& controller){for(const auto& w:controller.AuthoredDocument().widgets)if(w.hurt)active.insert(w.id);service.Observe(controller.AuthoredDocument());};
+        if(screenPresenter_->IsLoaded())observe(*screenController_);
+        if(hudSession_.IsLoaded())observe(*hudSession_.Controller());
+        service.RetainAuthored(active);service.SetFrame(combatState_.hurt.Frame());
+        std::string error;
+        if(screenPresenter_->IsLoaded())screenPresenter_->SetHurtFeedbackState(service.Snapshot(),false,!paused_,error);
+        if(hudSession_.IsLoaded())hudSession_.Presenter()->SetHurtFeedbackState(service.Snapshot(),true,!paused_&&uiComposition_.IsHudVisible()&&!worldMapOpen_,error);
+        float shake=0;
+        if(!paused_&&!worldMapOpen_&&uiComposition_.IsHudVisible()&&!uiAccessibility_.reducedMotion)
+            for(const auto& [id,view]:service.Snapshot().views)if(view.widget.visible)shake=std::max(shake,bridge::SampleHurtFeedback(*view.widget.hurt,service.Snapshot().frame).shake);
+        const auto& feedback=service.Snapshot().frame;
+        diagnosticService_.SetState("hurt_feedback",{{"available",feedback.available},{"alive",feedback.alive},
+            {"health_fraction",std::to_string(feedback.healthFraction)},{"hit_sequence",feedback.sequence},
+            {"last_hit_age",std::to_string(feedback.hits.empty()?-1:feedback.hits.back().age)},
+            {"seconds",std::to_string(feedback.seconds)},{"paused",paused_},{"shake",std::to_string(shake)}});
+        const auto seconds=feedback.seconds;
+        renderer_.SetHurtCameraShake({std::sin(seconds*113)*shake,std::sin(seconds*149)*shake*.7f});
     }
 }

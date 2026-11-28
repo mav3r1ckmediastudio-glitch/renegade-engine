@@ -278,6 +278,7 @@ bool AdoptPortableScreenPackage(const std::string& projectRoot,const StableId& p
                         if(!resource(slide.image)){fs::remove_all(stage);return false;}
                     }
                     if(w.navigation)for(auto& target:w.navigation->targets)if(!target.entityId.empty())target.entityId="unassigned:"+GenerateStableId();
+                    if(w.hurt)for(const auto& f:HurtResources())if(!resource((*w.hurt).*(f.member))){fs::remove_all(stage);return false;}
                     if(w.navigation)for(auto* path:NavigationResources(*w.navigation))if(!resource(*path)){fs::remove_all(stage);return false;}
                     if(w.liquid&&(!resource(w.liquid->mask)||!resource(w.liquid->decreaseSound)||!resource(w.liquid->increaseSound)))
                     {fs::remove_all(stage);return false;}

@@ -29,6 +29,7 @@ namespace renegade::studio
     class ScreenLiquidEditor;
     class ScreenNavigationEditor;
     class ScreenMinimapEditor;
+    class ScreenHurtEditor;
     // Native Screen authoring workspace. Gate 8C established selection,
     // Inspector editing and shared Runtime preview; Gate 8D adds creator-level
     // element transactions while keeping ScreenAuthoringSession authoritative.
@@ -158,7 +159,7 @@ namespace renegade::studio
         void SetOverlayInputBlocked(bool blocked) noexcept { overlayInputBlocked_ = blocked; }
         [[nodiscard]] bool HasOpenPopup() const noexcept
         {
-            return minimapEditorOpen_ || navigationEditorOpen_ || liquidEditorOpen_ || carouselEditorOpen_ || screenSettingsPicker_.IsOpen() || basicActionPicker_.IsOpen() ||
+            return hurtEditorOpen_ || minimapEditorOpen_ || navigationEditorOpen_ || liquidEditorOpen_ || carouselEditorOpen_ || screenSettingsPicker_.IsOpen() || basicActionPicker_.IsOpen() ||
                 destinationPicker_.IsOpen();
         }
         [[nodiscard]] bool IsFocusCanvas() const noexcept
@@ -362,6 +363,9 @@ namespace renegade::studio
         RenegadeTextInputField toolboxSearchInput_;
         std::shared_ptr<ScreenCarouselEditor> carouselEditor_;
         bool carouselEditorOpen_=false;
+        std::shared_ptr<ScreenHurtEditor> hurtEditor_;
+        bool hurtEditorOpen_=false;
+        void OpenHurtEditor();
         std::shared_ptr<ScreenMinimapEditor> minimapEditor_;
         bool minimapEditorOpen_=false;
         std::shared_ptr<ScreenNavigationEditor> navigationEditor_;
