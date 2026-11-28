@@ -1,4 +1,5 @@
 #include "renegade/bridge/ScreenLibraryService.h"
+#include "renegade/bridge/ScreenPrefabService.h"
 #include "renegade/bridge/DependencyService.h"
 #include "renegade/bridge/ScreenThemeResolver.h"
 #include <filesystem>
@@ -52,6 +53,36 @@ int main()
             reopened.focusOrder.size()==1 && reopened.focusOrder.front()==reopened.widgets.front().id)
             : (reopened.actions.empty() && reopened.focusOrder.empty()),
             "Standalone UI creation fabricated routing or omitted required controls");
+    }
+    // A reusable button group may route multiple controls to one outcome.
+    // Publication must preserve that shared action once, not reject duplicates.
+    {
+        ScreenDocument buttons;buttons.schemaVersion=3;buttons.usage=ScreenUsage::Menu;
+        buttons.envelope=CreateDocumentEnvelope(project,RuntimeScreenDocumentType,
+            "Content/UI/SharedAction.renegade-screen","Shared outcome prefab");
+        ScreenWidget group;group.id=GenerateStableId();group.kind=ScreenWidgetKind::Image;
+        group.name="Actions";group.rect={0,0,640,360};group.enabled=false;
+        group.style=MakeScreenWidgetStyleTemplate(group.kind,360);
+        buttons.widgets={group};buttons.actions={{"continue"}};
+        for(int i=0;i<2;++i){
+            ScreenWidget button;button.id=GenerateStableId();button.kind=ScreenWidgetKind::Button;
+            button.name=button.text=i==0?"Continue":"Continue alternative";button.parentId=group.id;
+            button.actionId="continue";button.rect={20.f+i*260,140,240,48};
+            button.style=MakeScreenWidgetStyleTemplate(button.kind,48);
+            buttons.focusOrder.push_back(button.id);buttons.widgets.push_back(button);
+        }
+        ScreenAuthoringSession author;
+        const auto path=(root/buttons.envelope.pathHint).generic_u8string();
+        const auto sharedPackage=root/"SharedActionPackage";
+        ScreenDocument published;
+        check(WriteScreenDocument(path,buttons,error)&&author.Open(path,project,error)&&
+            PublishScreenWidgetPrefab(root.generic_u8string(),author,group.id,sharedPackage.generic_u8string(),error)&&
+            InspectPortableScreenPackage(sharedPackage.generic_u8string(),published,error)&&
+            published.actions.size()==1&&published.widgets.size()==3&&
+            published.widgets[1].actionId=="continue"&&published.widgets[2].actionId=="continue",
+            "Button prefab lost a shared outcome or published duplicate actions");
+        // This isolated fixture must not affect the library catalogue checks.
+        std::filesystem::remove(root/buttons.envelope.pathHint);
     }
     ScreenDocument openedCreated;
     std::string resolvedPath,resolvedHint;

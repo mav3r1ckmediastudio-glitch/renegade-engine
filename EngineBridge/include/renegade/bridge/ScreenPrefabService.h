@@ -3,6 +3,7 @@
 #include "renegade/bridge/ScreenLibraryService.h"
 #include "renegade/bridge/DependencyService.h"
 #include <filesystem>
+#include <algorithm>
 #include <set>
 #include <map>
 namespace renegade::bridge
@@ -27,7 +28,8 @@ namespace renegade::bridge
             if(w.parentId.empty()){w.rect.x=0;w.rect.y=0;}
             if(w.video||w.cameraSource||!w.hintListPath.empty())
             {error="Save image/text/control prefabs without video, cameras or hint-list files.";return false;}
-            if(w.kind==ScreenWidgetKind::Button)doc.actions.push_back({w.actionId});
+            if(w.kind==ScreenWidgetKind::Button&&std::none_of(doc.actions.begin(),doc.actions.end(),
+                [&](const auto& action){return action.id==w.actionId;}))doc.actions.push_back({w.actionId});
             add(w.resourcePath);add(w.style.text.fontResource);
             add(w.progressFrameResourcePath);add(w.progressFillResourcePath);
             for(const auto* v:{&w.style.normal,&w.style.hover,&w.style.pressed,&w.style.focused,&w.style.disabled})add(v->imageResourcePath);
