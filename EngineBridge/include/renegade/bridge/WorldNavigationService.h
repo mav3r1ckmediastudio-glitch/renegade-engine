@@ -41,5 +41,6 @@ namespace renegade::bridge
     // win by default; replacing them is an explicit caller policy.
     bool ApplyNavigationAppearanceDraft(ScreenWidget& target,const ScreenWidget& appearance,std::string& error,bool keepAssignedIcons=true);
     bool ImportScreenNavigationImage(const std::string& root,const StableId& project,const std::string& source,std::string& output,std::string& error);
+    ScreenWidget MakeWorldMinimapWidget();
     ScreenWidget MakeWorldNavigationWidget(std::string name="World navigation");
 }

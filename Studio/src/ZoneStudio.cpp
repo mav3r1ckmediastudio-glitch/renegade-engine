@@ -547,7 +547,7 @@ namespace renegade::studio
     void StudioRenderPath::CreateLocationControls()
     {
         locationType_.Create("Location type");locationType_.SetDescription("Type ");
-        locationType_.SetTooltip("Location, Quest, Dungeon, POI, Event or your own type. Type does not limit your custom icon.");
+        locationType_.SetTooltip("Location, questgiver, vendor, Quest, Dungeon, POI, Event or a custom type. Choose an independent icon for this location.");
         locationType_.OnInputAccepted([this](const auto&){EditSelectedZone([&](auto& z){z.location.type=locationType_.GetValue();});});
         zoneInspector_.AddWidget(&locationType_);
         locationIcon_.Create("Location icon");locationIcon_.SetText("CHOOSE LOCATION ICON...");
@@ -580,8 +580,8 @@ namespace renegade::studio
         locationAdvanced_.OnClick([this](const auto&){locationAdvancedOpen_=!locationAdvancedOpen_;QueueInspectorRefresh();});zoneInspector_.AddWidget(&locationAdvanced_);
         locationRepeat_.Create("Repeat announcement on return");locationRepeat_.SetTooltip("Requires leaving beyond the trigger range plus a small margin before it can trigger again.");
         locationRepeat_.OnClick([this](const auto&){EditSelectedZone([&](auto& z){z.location.announcement.repeatOnReturn=locationRepeat_.GetCheck();});});zoneInspector_.AddWidget(&locationRepeat_);
-        locationCompass_.Create("Show on compass");locationCompass_.OnClick([this](const auto&){EditSelectedZone([&](auto& z){z.location.showOnCompass=locationCompass_.GetCheck();});});zoneInspector_.AddWidget(&locationCompass_);
-        locationVisibility_.Create("Compass discovery");locationVisibility_.AddItem("Show before discovery");locationVisibility_.AddItem("Show after entering zone");
+        locationCompass_.Create("Show on navigation");locationCompass_.OnClick([this](const auto&){EditSelectedZone([&](auto& z){z.location.showOnCompass=locationCompass_.GetCheck();});});zoneInspector_.AddWidget(&locationCompass_);
+        locationVisibility_.Create("Map / compass discovery");locationVisibility_.AddItem("Show before discovery");locationVisibility_.AddItem("Show after entering zone");
         locationVisibility_.OnSelect([this](const auto& a){EditSelectedZone([&](auto& z){z.location.onlyAfterDiscovery=a.iValue==1;});});zoneInspector_.AddWidget(&locationVisibility_);
     }
     void StudioRenderPath::LayoutLocationControls(const zones::Definition& z,float width,float& y)

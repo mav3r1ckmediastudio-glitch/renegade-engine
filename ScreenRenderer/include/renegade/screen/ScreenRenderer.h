@@ -14,6 +14,7 @@
 namespace wi
 {
     class RenderPath2D;
+    namespace graphics {struct Texture;}
 }
 
 namespace renegade::screen
@@ -128,6 +129,8 @@ namespace renegade::screen
         std::string VideoInfo(const bridge::StableId& id) const;
         std::uint64_t BackgroundCameraRevision() const;
         void UpdateCameraFeed(float dt);
+        using MinimapTextureProvider=std::function<const wi::graphics::Texture*(const bridge::StableId&)>;
+        void SetMinimapTextureProvider(MinimapTextureProvider provider);
         // Transient authoring preview, never mutates the Screen asset.
         bool PreviewCarouselEntry(const bridge::StableId& id,size_t entry);
         void RefreshCarouselPresentation();

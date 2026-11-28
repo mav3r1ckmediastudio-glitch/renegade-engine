@@ -140,3 +140,16 @@ namespace renegade::bridge
         return ApplyNavigationAppearanceDraft(candidate,appearance,error,keepAssignedIcons)&&Configure(id,std::move(candidate),error);
     }
 }
+
+namespace renegade::bridge
+{
+    ScreenWidget MakeWorldMinimapWidget()
+    {
+        auto w=MakeWorldNavigationWidget("Minimap");w.rect={956,24,280,280};
+        w.navigation->minimap.emplace();w.navigation->headingSource=NavigationHeadingSource::Player;
+        w.navigation->showNames=false;w.navigation->showDistance=false;w.navigation->markerSize=20;
+        w.style.text.shadowColor={0,0,0,230};w.style.text.shadowOffsetX=w.style.text.shadowOffsetY=1;
+        w.style.cornerRadius=140;w.style.borderWidth=2;w.style.borderColor={150,160,170,255};
+        return w;
+    }
+}

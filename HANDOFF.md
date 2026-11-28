@@ -1,3 +1,13 @@
+# Minimap and illustrated map | DESIGN | 28 November 2026
+
+UI Designer BASIC and Gameplay Navigation now create a resizable minimap with live overhead as the default and optional calibrated artwork. Native camera render-to-texture uses the current scene's normal render pass without cloning or a second simulation. The shared navigation owner supplies Location Zone targets; indexed hostile Character records supply nearby enemies. Zone types questgiver/vendor or entity-following registered targets supply those roles.
+
+The Renegade settings modal edits range, rotation, shape, camera quality, nearby filters, artwork bounds, fonts/colours and custom player/enemy/questgiver/vendor/default location icons. Individual Zone/target artwork takes precedence. Save uses one Screen history transaction; image/font dependencies persist and portable packages remap them. Governed renegade.minimap and renegade.map expose creation/configuration/target and full-map controls through the existing native service.
+
+M opens a separate illustrated map using the same world bounds/icons. Drag and wheel pan/zoom; Close/M/Esc restore gameplay and the HUD. Native DX12 review checked live geometry/marker alignment, full-map artwork, input isolation and resume, custom artwork/icons in a fresh Runtime, actual Basic palette insertion/Undo, imported font persistence and exact saved-document Undo/Redo. Seven focused Release suites and six source contracts passed. Source-evidence hashes refreshed; AssistantWorkflowSuite result is recorded in the evidence receipt. No push or hosted CI; Debug/exported-package/large-scene/independent checks remain separate. Review artwork is a coordinate diagnostic, not a launch pack.
+
+See docs/UI_MINIMAP_AUTHORING.md and docs/evidence/minimap-2026-11-28. Stock limits: four simultaneous live camera views; 128 rendered markers/view; nearest 128 hostile Character records. Discovery remains per-Level visit and there is no fog of war or roof cutaway. Studio is rebuilt for owner testing.
+
 # Equipped ammo counter and accepted weapon integration, 28 November 2026
 
 This local UI branch integrates feature/weapon-editor-zones-blood at 16036e9 so its current-player counter reads the accepted 1–9 slot owner. The previous UI checkout did not contain that weapon-switching implementation. The menu merge retains both Location Zone and Weapon Editor, using a single 15-item ADD menu count. Existing import guidance is retained and source-evidence hashes are refreshed.

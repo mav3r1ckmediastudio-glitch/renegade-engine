@@ -17,7 +17,7 @@ namespace renegade::studio
     {
         None, StoryFlow, Text, Button, Image, Video, Carousel, Background,
         Panel, Heading, Duplicate, Grid, Snap, Progress, GlobalHud, ProjectInventory,
-        Icon, Divider, Spacer, Counter, PlayerHealthBar, PlayerHealthText, PlayerAmmoText, Group, HorizontalStack, VerticalStack, LayoutGrid, Toggle, Slider, Selector, TextInput, GameplayAttributes, PublishUiPackage, AdoptUiPackage, UiBudgets, SaveUiPrefab, InsertUiPrefab, AnimatedVial, LiquidFill, WorldNavigation, LocationAnnouncement, AmmoCounter
+        Icon, Divider, Spacer, Counter, PlayerHealthBar, PlayerHealthText, PlayerAmmoText, Group, HorizontalStack, VerticalStack, LayoutGrid, Toggle, Slider, Selector, TextInput, GameplayAttributes, PublishUiPackage, AdoptUiPackage, UiBudgets, SaveUiPrefab, InsertUiPrefab, AnimatedVial, LiquidFill, WorldNavigation, LocationAnnouncement, AmmoCounter, Minimap
     };
 
     struct ScreenEditorLibraryScreen
@@ -92,6 +92,7 @@ namespace renegade::studio
             {"BASIC", "World navigation", ScreenToolboxAction::WorldNavigation},
             {"BASIC", "Location name", ScreenToolboxAction::LocationAnnouncement},
             {"BASIC", "Ammo counter", ScreenToolboxAction::AmmoCounter},
+            {"BASIC", "Minimap", ScreenToolboxAction::Minimap},
             {"BASIC", "Add background panel", ScreenToolboxAction::Background},
             {"BASIC", "Icon", ScreenToolboxAction::Icon}, {"BASIC", "Divider", ScreenToolboxAction::Divider}, {"BASIC", "Spacer", ScreenToolboxAction::Spacer},
             {"LAYOUT", "Group", ScreenToolboxAction::Group}, {"LAYOUT", "Horizontal Stack", ScreenToolboxAction::HorizontalStack},
@@ -114,7 +115,7 @@ namespace renegade::studio
             {"GAMEPLAY", "Health text - current Player", ScreenToolboxAction::PlayerHealthText},
             {"GAMEPLAY", "Loaded ammo - current Player", ScreenToolboxAction::PlayerAmmoText},
             {"GAMEPLAY", "Inventory"}, {"GAMEPLAY", "Ability"},
-            {"GAMEPLAY", "Quest"}, {"GAMEPLAY", "Minimap"},
+            {"GAMEPLAY", "Quest"}, {"GAMEPLAY", "Minimap", ScreenToolboxAction::Minimap},
             {"FEEDBACK", "Tooltip"}, {"FEEDBACK", "Notification"},
             {"FEEDBACK", "Popup"}, {"FEEDBACK", "Modal"},
             {"FEEDBACK", "Loading"},

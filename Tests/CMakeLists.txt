@@ -2294,3 +2294,9 @@ target_link_libraries(RenegadeScreenAmmoPrefabTests PRIVATE Renegade::RuntimeBoo
 add_test(NAME RenegadeScreenAmmoPrefabTests COMMAND RenegadeScreenAmmoPrefabTests)
 set_tests_properties(RenegadeScreenAmmoPrefabTests PROPERTIES TIMEOUT 30)
 add_dependencies(RenegadeBridgeTests RenegadeScreenAmmoPrefabTests)
+
+add_executable(RenegadeMinimapTests MinimapTests.cpp)
+target_link_libraries(RenegadeMinimapTests PRIVATE Renegade::RuntimeBootstrap)
+add_test(NAME RenegadeMinimapTests COMMAND RenegadeMinimapTests)
+set_tests_properties(RenegadeMinimapTests PROPERTIES TIMEOUT 30)
+add_dependencies(RenegadeBridgeTests RenegadeMinimapTests)

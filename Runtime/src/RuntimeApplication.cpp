@@ -847,7 +847,7 @@ namespace renegade::runtime
 
         const bool typingInOtherUi=renderer_.GetGUI().IsTyping();
         const bool gameplayInputAllowed =
-            !uiComposition_.Resolve().gameplayInputBlocked && !typingInOtherUi && !dialogue_.Active() && collisionReady;
+            !worldMapOpen_ && !uiComposition_.Resolve().gameplayInputBlocked && !typingInOtherUi && !dialogue_.Active() && collisionReady;
         const bool gameplayFrame = !scenes_.CurrentPath().empty();
         // G13E14 one-level verification uses the exact regular controller and
         // Jolt/scene movement path; synthetic input is gated to the developer
@@ -863,13 +863,19 @@ namespace renegade::runtime
         const bool inventoryInteractionAllowed = InventoryInteractHasFocus(
             gameplayFrame,inventoryOverlayOpen_,
             inventoryScreenPresenter_->IsLoaded(),paused_,typingInOtherUi);
+        if(worldMapOpen_&&worldMapCloseRequested_){std::string error;SetWorldMapOpen(false,error);}
         if (gameplayFrame)
         {
+            const auto mapInput=bridge::CaptureGameplayInput(inputMap_,dt);
+            if(!typingInOtherUi&&((worldMapOpen_&&(mapInput.mapPressed||mapInput.pausePressed))||
+                (!worldMapOpen_&&!inventoryOverlayOpen_&&gameplayInputAllowed&&!paused_&&mapInput.mapPressed))){
+                std::string error;if(!SetWorldMapOpen(!worldMapOpen_,error))wi::backlog::post("World map: "+error,wi::backlog::LogLevel::Warning);
+            }
             // Feed current input into the one authoritative Player before
             // Wicked advances physics. The View Rig is parented to that Player,
             // so the normal physics -> hierarchy -> object update carries the
             // first-person presentation to the same post-physics position.
-            gameplayInput_ = (gameplayInputAllowed || inventoryInteractionAllowed)
+            gameplayInput_ = (!worldMapOpen_&&(gameplayInputAllowed || inventoryInteractionAllowed))
                 ? bridge::CaptureGameplayInput(inputMap_, dt) : bridge::GameplayInputFrame{};
             if(gameplayInputAllowed && !paused_ && playerViewAnimation_.initialized)
                 for(size_t i=0;i<weaponSlots_.size();++i)if(wi::input::Press(static_cast<wi::input::BUTTON>('1'+i)))SelectWeaponSlot(i);
@@ -1154,7 +1160,7 @@ namespace renegade::runtime
         }
         const auto bindingStart=std::chrono::steady_clock::now();
         UpdateUiBindings();
-        UpdateWorldNavigation();
+        UpdateWorldNavigation(dt);
         if(screenPresenter_->IsLoaded()||hudSession_.IsLoaded())
         {
             const auto elapsed=std::chrono::duration_cast<std::chrono::microseconds>(
@@ -1570,7 +1576,7 @@ namespace renegade::runtime
         attributeDiagnostic_.clear();
     }
 
-    void RuntimeApplication::UpdateWorldNavigation()
+    void RuntimeApplication::UpdateWorldNavigation(float dt)
     {
         std::string error;
         auto& navigation=creatorScripts_.Navigation();
@@ -1578,6 +1584,7 @@ namespace renegade::runtime
         const auto collectNavigation=[&](const RuntimeScreenController& controller){for(const auto& w:controller.AuthoredDocument().widgets)if(w.navigation)activeNavigationViews.insert(w.id);};
         if(screenPresenter_->IsLoaded())collectNavigation(*screenController_);
         if(hudSession_.IsLoaded())collectNavigation(*hudSession_.Controller());
+        if(worldMapOverlay_.IsLoaded())collectNavigation(*worldMapOverlay_.Controller());
         navigation.RetainAuthoredViews(activeNavigationViews);
         bridge::NavigationObserver navCamera,navPlayer;
         if(renderer_.camera)
@@ -1601,9 +1608,35 @@ namespace renegade::runtime
         for(const auto& target:navigation.Snapshot().targets)if(target.id.rfind("location:",0)==0&&!locations.Get(target.id.substr(9)))retiredLocations.push_back(target.id);
         for(const auto& id:retiredLocations)navigation.RemoveTarget(id,error);
 
+        // Character records are already owned/indexed by the gameplay system.
+        // Read transforms directly; no scene-wide discovery or marker entity scan.
+        struct ActorMarker {const RuntimeCharacterRecord* actor;bridge::NavigationPoint position;float distance;};
+        std::vector<ActorMarker> candidates;
+        const bool wantEnemies=std::any_of(navigation.Snapshot().views.begin(),navigation.Snapshot().views.end(),[](const auto& item){
+            const auto& w=item.second.widget;return w.visible&&w.navigation&&w.navigation->minimap&&w.navigation->minimap->showEnemies;});
+        if(navPlayer.available&&wantEnemies)for(const auto& actor:characterAiState_.characters){
+            const auto* body=scenes_.GetScene().characters.GetComponent(actor.entity);
+            const auto* pose=scenes_.GetScene().transforms.GetComponent(actor.entity);
+            const auto* combat=FindCharacterCombat(combatState_,actor.stableEntityId);
+            if(!body||!pose||(combat&&combat->dead)||bridge::DefaultFactionRelationship("Player",actor.authoring.factionId)!=bridge::FactionRelationship::Hostile)continue;
+            const auto p=pose->GetPosition();const float distance=std::hypot(p.x-navPlayer.position.x,p.z-navPlayer.position.z);
+            if(std::isfinite(distance))candidates.push_back({&actor,{p.x,p.y,p.z},distance});
+        }
+        const size_t count=std::min<size_t>(128,candidates.size());
+        std::partial_sort(candidates.begin(),candidates.begin()+count,candidates.end(),[](const auto& a,const auto& b){
+            if(a.distance!=b.distance)return a.distance<b.distance;return a.actor->stableEntityId<b.actor->stableEntityId;});
+        std::set<std::string> activeActors;
+        for(size_t i=0;i<count;++i){const auto& actor=*candidates[i].actor;const auto key="actor:"+actor.stableEntityId;
+            const auto* name=scenes_.GetScene().names.GetComponent(actor.entity);
+            bridge::NavigationTarget t{key,name?name->name.substr(0,160):"Enemy","enemy","",candidates[i].position,5,true};t.minimapOnly=true;
+            if(navigation.PutTarget(std::move(t),error))activeActors.insert(key);
+        }
+        for(const auto& old:actorNavigationTargets_)if(!activeActors.count(old)&&navigation.Target(old))navigation.RemoveTarget(old,error);
+        actorNavigationTargets_=std::move(activeActors);
         creatorScripts_.ResolveNavigationEntities();
         const auto apply=[&](RuntimeScreenController& controller,RuntimeScreenPresenter& presenter)
         {
+            presenter.SetMinimapTextureProvider([this](const bridge::StableId& id){return minimapCameras_.Texture(scenes_.GetScene(),id);});
             bridge::ScreenDocument navigationPrototypes;
             for(const auto& w:controller.AuthoredDocument().widgets)if(w.navigation&&!navigation.View(w.id))
             {
@@ -1612,7 +1645,7 @@ namespace renegade::runtime
                 navigationPrototypes.widgets.push_back(std::move(copy));
             }
             if(!navigation.ObserveDocument(navigationPrototypes,error)||
-                !presenter.SetNavigationState(navigation.Snapshot(),controller.AuthoredDocument().usage==bridge::ScreenUsage::Hud,error))
+                !presenter.SetNavigationState(navigation.Snapshot(),controller.AuthoredDocument().usage==bridge::ScreenUsage::Hud && &controller!=worldMapOverlay_.Controller(),error))
             {return false;}
             return true;
         };
@@ -1634,6 +1667,19 @@ namespace renegade::runtime
         if ((screenPresenter_->IsLoaded()&&!apply(*screenController_,*screenPresenter_)) ||
             (hudSession_.IsLoaded()&&uiComposition_.IsHudVisible()&&!apply(*hudSession_.Controller(),*hudSession_.Presenter())))
             wi::backlog::post("Renegade Runtime navigation: "+error,wi::backlog::LogLevel::Warning);
+        if(worldMapOverlay_.IsLoaded()){
+            apply(*worldMapOverlay_.Controller(),*worldMapOverlay_.Presenter());
+            worldMapOverlay_.Presenter()->UpdateInput(renderer_,*worldMapOverlay_.Controller(),true,dt);
+        }
+        std::set<bridge::StableId> visible;
+        if(!worldMapOpen_){
+            const auto addVisible=[&](const RuntimeScreenController& controller){for(const auto& w:controller.Document().widgets)
+                if(w.navigation&&w.visible){const auto* view=navigation.View(w.id);if(view&&view->widget.visible)visible.insert(w.id);}};
+            if(screenPresenter_->IsLoaded())addVisible(*screenController_);
+            if(hudSession_.IsLoaded()&&uiComposition_.IsHudVisible())addVisible(*hudSession_.Controller());
+            if(hudSession_.IsLoaded()&&uiComposition_.IsHudVisible())for(const auto& [id,view]:navigation.Snapshot().views)if(!view.authored&&view.widget.visible)visible.insert(id);
+        }
+        minimapCameras_.Update(scenes_.GetScene(),scenes_.Revision(),navigation.Snapshot(),visible);
     }
 
     void RuntimeApplication::UpdateUiBindings()
@@ -3674,7 +3720,7 @@ namespace renegade::runtime
         inventoryOverlayCache_={};
         renderer_.SetInventoryOverlay({},false);
         creatorScripts_.SetInventoryGatewayProvider({});
-        creatorScripts_.SetDialogueApi({});
+        creatorScripts_.SetDialogueApi({});creatorScripts_.SetWorldMapApi({},{});
         creatorScripts_.SetWeaponAmmoProvider({});
         dialogue_.SetLifecycleSink({});
 
@@ -3778,6 +3824,7 @@ namespace renegade::runtime
             return creatorScripts_.EnqueueGameplayEvent(std::move(event), error);
         });
         creatorScripts_.SetDialogueApi(dialogue_.ScriptApi(scenes_.GetScene(), renderer_));
+        creatorScripts_.SetWorldMapApi([this](bool open,std::string& error){return SetWorldMapOpen(open,error);},[this]{return worldMapOpen_;});
         creatorScripts_.SetWeaponAmmoProvider([this]{
             if(!player_.IsSpawned())return bridge::PlayerWeaponAmmo{};
             return CapturePlayerWeaponAmmo(&playerViewAnimation_,
@@ -3860,6 +3907,8 @@ namespace renegade::runtime
 
     void RuntimeApplication::StopCreatorScripts() noexcept
     {
+        worldMapOverlay_.Reset(renderer_);worldMapOpen_=false;worldMapCloseRequested_=false;
+        minimapCameras_.Reset(scenes_.GetScene());actorNavigationTargets_.clear();
         if (creatorScripts_.IsRunning())
             creatorScripts_.StopScene();
         // Release all live script bindings before destroying inventory authority.
@@ -3869,7 +3918,7 @@ namespace renegade::runtime
         inventoryUiStatus_.clear();
         inventorySession_.Reset();
         creatorScripts_.SetInventoryGatewayProvider({});
-        creatorScripts_.SetDialogueApi({});
+        creatorScripts_.SetDialogueApi({});creatorScripts_.SetWorldMapApi({},{});
         creatorScripts_.SetWeaponAmmoProvider({});
         dialogue_.SetLifecycleSink({});
         renderer_.SetInteractionPrompt({});
@@ -3982,12 +4031,12 @@ namespace renegade::runtime
         const bool inventoryOwnsInput=inventoryOverlayOpen_ &&
             inventoryScreenPresenter_->IsLoaded();
         screenPresenter_->SetInputEnabled(
-            !inventoryOwnsInput && uiComposition_.PrimaryAcceptsInput());
+            !worldMapOpen_ && !inventoryOwnsInput && uiComposition_.PrimaryAcceptsInput());
         if(hudSession_.IsLoaded())
         {
             hudSession_.Presenter()->SetInputEnabled(
-                !inventoryOwnsInput && uiComposition_.HudAcceptsInput());
-            hudSession_.Presenter()->SetPresentationVisible(uiComposition_.IsHudVisible());
+                !worldMapOpen_ && !inventoryOwnsInput && uiComposition_.HudAcceptsInput());
+            hudSession_.Presenter()->SetPresentationVisible(!worldMapOpen_ && uiComposition_.IsHudVisible());
         }
         if(wasHudVisible!=uiComposition_.IsHudVisible())RefreshUiBindingSources();
         if(uiDrawOrder_!=state.drawOrder)
@@ -4004,14 +4053,14 @@ namespace renegade::runtime
             RefreshUiBindingSources();
         }
         RefreshEffectivePause();
-        if (dialogue_.Active() || inventoryOwnsInput) wi::input::HidePointer(false);
+        if (worldMapOpen_ || dialogue_.Active() || inventoryOwnsInput) wi::input::HidePointer(false);
         else if (state.cursor == bridge::ScreenCursorPolicy::Show) wi::input::HidePointer(false);
         else if (state.cursor == bridge::ScreenCursorPolicy::Hide) wi::input::HidePointer(true);
     }
 
     void RuntimeApplication::RefreshEffectivePause() noexcept
     {
-        renderer_.SetPauseOverlayVisible(manualPauseRequested_ && !uiPauseRequested_);
+        renderer_.SetPauseOverlayVisible(manualPauseRequested_ && !uiPauseRequested_ && !worldMapOpen_);
         renderer_.SetLevelComplete(directLevelWon_);
         const bool paused = directLevelWon_ || manualPauseRequested_ || uiPauseRequested_;
         if (paused_ == paused)
@@ -5115,5 +5164,35 @@ namespace renegade::runtime
         }
 
         ++evidenceRevision_;
+    }
+}
+
+namespace renegade::runtime
+{
+    bool RuntimeApplication::SetWorldMapOpen(bool open,std::string& error)
+    {
+        if(open==worldMapOpen_){error.clear();return true;}
+        if(!open){worldMapOverlay_.Reset(renderer_);worldMapOpen_=false;worldMapCloseRequested_=false;SetPaused(worldMapWasPaused_);error.clear();return true;}
+        if(!player_.IsSpawned()){error="A world map requires an active player.";return false;}
+        auto map=bridge::MakeWorldMinimapWidget();
+        for(const auto& [id,view]:creatorScripts_.Navigation().Snapshot().views)
+            if(view.widget.navigation&&view.widget.navigation->minimap&&!view.widget.navigation->minimap->fullMap){map=view.widget;break;}
+        auto& c=*map.navigation;auto& m=*c.minimap;
+        if(!m.mapKeyEnabled){error="Full map is disabled in the minimap settings.";return false;}
+        map.id=bridge::GenerateStableId();map.parentId.clear();map.component.reset();map.animations.clear();map.layoutMode=bridge::ScreenLayoutMode::Absolute;
+        map.rect={80,76,1120,564};map.name="World map artwork";c.headingSource=bridge::NavigationHeadingSource::Player;
+        if(!m.worldMapImage.empty())m.image=m.worldMapImage;else if(m.live)m.image.clear();
+        m.live=false;m.fullMap=true;m.rotate=false;m.round=false;m.clampEdges=false;m.resolution=2048;
+        m.range=std::max(m.north-m.south,(m.east-m.west)/(1120.f/564.f))*.5f;
+        c.showNames=true;c.showDistance=false;map.style.cornerRadius=6;map.style.opacity=1;
+        bridge::ScreenDocument doc;doc.usage=bridge::ScreenUsage::Hud;
+        doc.envelope=bridge::CreateDocumentEnvelope(startupResult_.project.projectId,bridge::RuntimeScreenDocumentType,"Content/UI/RuntimeWorldMap.renegade-screen","runtime-world-map");
+        bridge::ScreenWidget backing;backing.id=bridge::GenerateStableId();backing.name="World map backing";backing.kind=bridge::ScreenWidgetKind::Image;backing.enabled=false;backing.rect={0,0,1280,720};backing.style=bridge::MakeScreenWidgetStyleTemplate(backing.kind,720);
+        for(auto* v:{&backing.style.normal,&backing.style.hover,&backing.style.pressed,&backing.style.focused,&backing.style.disabled})v->background={12,16,22,245};
+        bridge::ScreenWidget title;title.id=bridge::GenerateStableId();title.name="Map title";title.kind=bridge::ScreenWidgetKind::Text;title.text="WORLD MAP";title.enabled=false;title.rect={80,20,500,40};title.style=bridge::MakeScreenWidgetStyleTemplate(title.kind,40);title.style.text.fontSize=24;
+        bridge::ScreenWidget close;close.id=bridge::GenerateStableId();close.name="Close map";close.kind=bridge::ScreenWidgetKind::Button;close.text="CLOSE";close.actionId="ui.map.close";close.rect={1100,20,100,40};close.style=bridge::MakeScreenWidgetStyleTemplate(close.kind,40);
+        doc.widgets={backing,map,title,close};doc.actions.push_back({close.actionId});doc.focusOrder={close.id};
+        if(!worldMapOverlay_.Load(doc,startupResult_.project.rootPath,renderer_,[this](RuntimeActionRequest request){if(request.actionId=="ui.map.close")worldMapCloseRequested_=true;},error,uiAccessibility_.reducedMotion,uiAccessibility_.presentation))return false;
+        worldMapWasPaused_=manualPauseRequested_;worldMapOpen_=true;worldMapCloseRequested_=false;SetPaused(true);wi::input::HidePointer(false);error.clear();return true;
     }
 }

@@ -95,6 +95,7 @@ namespace renegade::runtime
         // Configure before StartScene. Empty callbacks omit renegade.dialogue.
         // The host owns the same conversation/memory used by normal NPC input.
         void SetDialogueApi(RuntimeDialogueScriptApi api);
+        void SetWorldMapApi(std::function<bool(bool,std::string&)> set,std::function<bool()> get);
         // Host callback reads the same active weapon used by native HUD bindings.
         void SetWeaponAmmoProvider(std::function<bridge::PlayerWeaponAmmo()> provider);
 

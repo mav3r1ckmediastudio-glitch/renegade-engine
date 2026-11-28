@@ -20,11 +20,18 @@ namespace renegade::bridge::detail
         s.Set("nav_heading",c.manualHeading);s.Set("nav_icon_size",c.markerSize);s.Set("nav_gap",c.markerGap);
         s.Set("nav_range",c.maxDistance);s.Set("nav_names",c.showNames);s.Set("nav_distances",c.showDistance);
         s.Set("nav_ticks",c.showTicks);s.Set("nav_strip",c.bearingStrip);s.Set("nav_pointer",c.pointerImage);s.Set("nav_filter",c.categoryFilter);
+        if(c.minimap){const auto& m=*c.minimap;s.Set("nav_minimap_version",1);
+            s.Set("map_live",m.live);s.Set("map_rotate",m.rotate);s.Set("map_round",m.round);s.Set("map_edges",m.clampEdges);s.Set("map_player",m.showPlayer);
+            s.Set("map_range",m.range);s.Set("map_height",m.cameraHeight);s.Set("map_hz",m.updateHz);s.Set("map_player_size",m.playerSize);s.Set("map_resolution",int(m.resolution));
+            s.Set("map_image",m.image);s.Set("map_player_icon",m.playerIcon);s.Set("map_world_image",m.worldMapImage);
+            s.Set("map_full",m.fullMap);s.Set("map_key",m.mapKeyEnabled);s.Set("map_enemies",m.showEnemies);s.Set("map_quests",m.showQuestGivers);s.Set("map_vendors",m.showVendors);
+            s.Set("map_west",m.west);s.Set("map_east",m.east);s.Set("map_south",m.south);s.Set("map_north",m.north);
+        }
         s.Set("nav_icon_count",int(c.icons.size()));int i=0;
         for(const auto& [category,path]:c.icons){const auto k="nav_icon_"+std::to_string(i++);s.Set((k+"_category").c_str(),category);s.Set((k+"_path").c_str(),path);}
         s.Set("nav_target_count",int(c.targets.size()));i=0;
         for(const auto& t:c.targets){const auto k="nav_target_"+std::to_string(i++);
-            s.Set((k+"_id").c_str(),t.id);if(!t.icon.empty())s.Set((k+"_icon").c_str(),t.icon);s.Set((k+"_label").c_str(),t.label);s.Set((k+"_category").c_str(),t.category);s.Set((k+"_entity").c_str(),t.entityId);
+            s.Set((k+"_id").c_str(),t.id);if(t.minimapOnly)s.Set((k+"_map_only").c_str(),true);if(!t.icon.empty())s.Set((k+"_icon").c_str(),t.icon);s.Set((k+"_label").c_str(),t.label);s.Set((k+"_category").c_str(),t.category);s.Set((k+"_entity").c_str(),t.entityId);
             s.Set((k+"_x").c_str(),t.position.x);s.Set((k+"_y").c_str(),t.position.y);s.Set((k+"_z").c_str(),t.position.z);s.Set((k+"_priority").c_str(),t.priority);s.Set((k+"_visible").c_str(),t.visible);}
     }
     template<class S> bool ReadNavigation(const S& s,ScreenNavigation& c)
@@ -38,9 +45,22 @@ namespace renegade::bridge::detail
             !NavigationBool(s,"nav_distances",c.showDistance)||!NavigationBool(s,"nav_ticks",c.showTicks)||
             !NavigationScalar(s,"nav_icon_count",icons)||icons<0||icons>64||
             !NavigationScalar(s,"nav_target_count",targets)||targets<0||targets>64)return false;
+        if(s.Has("nav_minimap_version")){
+            ScreenMinimap m;int version=0;
+            if(!NavigationScalar(s,"nav_minimap_version",version)||version!=1||
+                !NavigationBool(s,"map_live",m.live)||!NavigationBool(s,"map_rotate",m.rotate)||!NavigationBool(s,"map_round",m.round)||
+                !NavigationBool(s,"map_edges",m.clampEdges)||!NavigationBool(s,"map_player",m.showPlayer)||
+                !NavigationScalar(s,"map_range",m.range)||!NavigationScalar(s,"map_height",m.cameraHeight)||!NavigationScalar(s,"map_hz",m.updateHz)||
+                !NavigationScalar(s,"map_player_size",m.playerSize)||!NavigationScalar(s,"map_resolution",m.resolution)||
+                !NavigationScalar(s,"map_west",m.west)||!NavigationScalar(s,"map_east",m.east)||!NavigationScalar(s,"map_south",m.south)||!NavigationScalar(s,"map_north",m.north))return false;
+            for(const auto& field:std::vector<std::pair<const char*,bool*>>{{"map_full",&m.fullMap},{"map_key",&m.mapKeyEnabled},{"map_enemies",&m.showEnemies},{"map_quests",&m.showQuestGivers},{"map_vendors",&m.showVendors}})
+                if(s.Has(field.first)&&!NavigationBool(s,field.first,*field.second))return false;
+            m.worldMapImage=s.GetText("map_world_image");m.image=s.GetText("map_image");m.playerIcon=s.GetText("map_player_icon");c.minimap=std::move(m);
+        }
         c.headingSource=static_cast<NavigationHeadingSource>(source);c.bearingStrip=s.GetText("nav_strip");c.pointerImage=s.GetText("nav_pointer");c.categoryFilter=s.GetText("nav_filter");
         for(int i=0;i<icons;++i){const auto k="nav_icon_"+std::to_string(i);if(!c.icons.emplace(s.GetText((k+"_category").c_str()),s.GetText((k+"_path").c_str())).second)return false;}
         for(int i=0;i<targets;++i){const auto k="nav_target_"+std::to_string(i);NavigationTarget t;
+            if(s.Has((k+"_map_only").c_str())&&!NavigationBool(s,(k+"_map_only").c_str(),t.minimapOnly))return false;
             t.id=s.GetText((k+"_id").c_str());t.icon=s.GetText((k+"_icon").c_str());t.label=s.GetText((k+"_label").c_str());t.category=s.GetText((k+"_category").c_str());t.entityId=s.GetText((k+"_entity").c_str());
             if(!NavigationScalar(s,(k+"_x").c_str(),t.position.x)||!NavigationScalar(s,(k+"_y").c_str(),t.position.y)||!NavigationScalar(s,(k+"_z").c_str(),t.position.z)||
                 !NavigationScalar(s,(k+"_priority").c_str(),t.priority)||!NavigationBool(s,(k+"_visible").c_str(),t.visible))return false;

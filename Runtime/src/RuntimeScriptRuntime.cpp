@@ -230,6 +230,8 @@ namespace renegade::runtime
         std::function<bridge::InventoryGameplayGateway*(
             const bridge::StableId&, const bridge::StableId&)> inventoryGatewayProvider;
         RuntimeDialogueScriptApi dialogueApi;
+        std::function<bool(bool,std::string&)> worldMapSet;
+        std::function<bool()> worldMapGet;
         std::function<bridge::PlayerWeaponAmmo()> weaponAmmoProvider;
         std::uint64_t dispatchedEventCount = 0;
         std::uint64_t eventDeliveryAttemptCount = 0;
@@ -1448,6 +1450,7 @@ namespace renegade::runtime
                 return frame.player.sprintDown ? 1.0f : 0.0f;
             case bridge::GameplayAction::Interact:
                 return frame.interactPressed ? 1.0f : 0.0f;
+            case bridge::GameplayAction::Map: return frame.mapPressed?1.f:0.f;
             case bridge::GameplayAction::Pause:
                 return frame.pausePressed ? 1.0f : 0.0f;
             case bridge::GameplayAction::Reset:
@@ -1517,6 +1520,8 @@ namespace renegade::runtime
             case bridge::GameplayAction::Interact:
                 pressed = owner->gameplayInput->interactPressed;
                 break;
+            case bridge::GameplayAction::Map:
+                pressed=owner->gameplayInput->mapPressed;break;
             case bridge::GameplayAction::Pause:
                 pressed = owner->gameplayInput->pausePressed;
                 break;
@@ -1815,7 +1820,7 @@ namespace renegade::runtime
             lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,LightSetStateLua,1);lua_setfield(lua,-2,"set_state");
             lua_setfield(lua,-2,"light");
             RegisterParticleLua();
-            RegisterNavigationLua();RegisterLocationLua();
+            RegisterNavigationLua();RegisterLocationLua();RegisterMinimapLua();RegisterWorldMapLua();
 
             lua_newtable(lua);
             lua_pushlightuserdata(lua, this);
@@ -2813,6 +2818,9 @@ namespace renegade::runtime
         if (impl_ && !impl_->running)
             impl_->inventoryGatewayProvider = std::move(provider);
     }
+
+    void RuntimeScriptRuntime::SetWorldMapApi(std::function<bool(bool,std::string&)> set,std::function<bool()> get)
+    {impl_->worldMapSet=std::move(set);impl_->worldMapGet=std::move(get);}
 
     void RuntimeScriptRuntime::SetDialogueApi(RuntimeDialogueScriptApi api)
     {

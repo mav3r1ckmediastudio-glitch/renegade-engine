@@ -15,7 +15,7 @@ bool LoadNavigationArtwork(const std::string& root,std::string& error,const std:
         if(!resource.IsValid()||!resource.GetTexture().IsValid()){error="Cannot load navigation artwork: "+*path;return false;}
         loaded.emplace(*path,std::move(resource));
     }
-    navigationArtwork=std::move(loaded);return true;
+    navigationArtwork=std::move(loaded);minimapSettings.clear();return true;
 }
 void DrawNavigation(const wi::Canvas& canvas,wi::graphics::CommandList cmd,
     wi::graphics::Rect clipped,const renegade::bridge::ScreenWidgetStyle& style) const

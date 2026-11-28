@@ -1,0 +1,7 @@
+Test project C:/Users/paulw/AppData/Local/RenegadeWork/DesignerBackground1127/BUILD/creator
+    Start 213: RenegadeAssistantWorkflowSuite
+1/1 Test #213: RenegadeAssistantWorkflowSuite ...   Passed   17.61 sec
+
+100% tests passed out of 1
+
+Total Test time (real) =  17.63 sec

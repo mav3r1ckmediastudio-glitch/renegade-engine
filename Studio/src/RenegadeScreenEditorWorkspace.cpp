@@ -1,6 +1,7 @@
 #include "renegade/bridge/ScreenAmmoCounter.h"
 #include "renegade/bridge/WorldLocationService.h"
 #include "ScreenNavigationEditor.h"
+#include "ScreenMinimapEditor.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/ScreenClickSound.h"
@@ -124,6 +125,7 @@ namespace renegade::studio
         carouselEditor_->Create();
         liquidEditor_=std::make_shared<ScreenLiquidEditor>();liquidEditor_->Create();
         navigationEditor_=std::make_shared<ScreenNavigationEditor>();navigationEditor_->Create();
+        minimapEditor_=std::make_shared<ScreenMinimapEditor>();minimapEditor_->Create();
         SetName("Renegade Screen Editor workspace");
         SetShadowRadius(0.0f);
         CreateControls();
@@ -175,6 +177,7 @@ namespace renegade::studio
         if(carouselEditor_)carouselEditor_->Close();
         if(liquidEditor_)liquidEditor_->Close();liquidEditorOpen_=false;
         if(navigationEditor_)navigationEditor_->Close();navigationEditorOpen_=false;
+        if(minimapEditor_)minimapEditor_->Close();minimapEditorOpen_=false;
         carouselEditorOpen_=false;
         session_ = nullptr;
         renderer_ = nullptr;
@@ -1652,7 +1655,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::HandleUndoRedoShortcuts()
     {
-        if(carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_)return;
+        if(carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_||minimapEditorOpen_)return;
         if (!session_ || !session_->IsLoaded() ||
             directManipulationMode_ != DirectManipulationMode::None ||
             panelDrag_ != PanelDrag::None)
@@ -1680,7 +1683,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::HandleDeleteShortcut()
     {
-        if(carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_)return;
+        if(carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_||minimapEditorOpen_)return;
         if (!session_ || !session_->IsLoaded() ||
             session_->FindWidget(selectedWidgetId_) == nullptr ||
             directManipulationMode_ != DirectManipulationMode::None ||
@@ -1695,7 +1698,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::HandleLayerOrderShortcuts()
     {
-        if(carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_)return;
+        if(carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_||minimapEditorOpen_)return;
 #if defined(_WIN32)
         if (!session_ || !session_->IsLoaded() ||
             session_->FindWidget(selectedWidgetId_) == nullptr ||
@@ -2446,8 +2449,9 @@ namespace renegade::studio
     void RenegadeScreenEditorWorkspace::Update(const wi::Canvas& canvas,const float dt)
     {
         if (!IsVisible() || !IsEnabled())
-        {if(navigationEditor_&&navigationEditorOpen_)navigationEditor_->Close();if(carouselEditor_&&carouselEditorOpen_)carouselEditor_->Close();if(liquidEditor_&&liquidEditorOpen_)liquidEditor_->Close();return;}
+        {if(minimapEditor_&&minimapEditorOpen_)minimapEditor_->Close();if(navigationEditor_&&navigationEditorOpen_)navigationEditor_->Close();if(carouselEditor_&&carouselEditorOpen_)carouselEditor_->Close();if(liquidEditor_&&liquidEditorOpen_)liquidEditor_->Close();return;}
         Widget::Update(canvas,dt);
+        if(minimapEditor_&&minimapEditor_->IsVisible()){minimapEditor_->Update(canvas,dt);return;}
         if(navigationEditor_&&navigationEditor_->IsVisible())
         {navigationEditor_->Update(canvas,dt);return;}
         if(liquidEditor_&&liquidEditor_->IsVisible())
@@ -2461,6 +2465,7 @@ namespace renegade::studio
         if (basicActionPicker_.IsOpen()) { basicActionPicker_.Update(); return; }
         if (destinationPicker_.IsOpen()) { destinationPicker_.Update(); return; }
         UpdateControls(canvas,dt);
+        if(minimapEditor_&&minimapEditor_->IsVisible()){minimapEditor_->Update(canvas,dt);return;}
         if(navigationEditor_&&navigationEditor_->IsVisible())
         {navigationEditor_->Update(canvas,dt);return;}
         if(liquidEditor_&&liquidEditor_->IsVisible())
@@ -2879,6 +2884,7 @@ namespace renegade::studio
         if(carouselEditor_&&carouselEditor_->IsVisible())carouselEditor_->Render(canvas,cmd);
         if(liquidEditor_&&liquidEditor_->IsVisible())liquidEditor_->Render(canvas,cmd);
         if(navigationEditor_&&navigationEditor_->IsVisible())navigationEditor_->Render(canvas,cmd);
+        if(minimapEditor_&&minimapEditor_->IsVisible())minimapEditor_->Render(canvas,cmd);
     }
 }
 
@@ -3073,6 +3079,13 @@ namespace renegade::studio
                 InsertUiPrefab((std::filesystem::u8path(wi::helper::GetExecutablePath()).parent_path()/"Content/UI/Prefabs/WorldNavigation").generic_u8string(),true);break;
             case ScreenToolboxAction::LiquidFill:
                 InsertUiPrefab((std::filesystem::u8path(wi::helper::GetExecutablePath()).parent_path()/"Content/UI/Prefabs/LiquidFill").generic_u8string());break;
+            case ScreenToolboxAction::Minimap:
+            {
+                auto widget=bridge::MakeWorldMinimapWidget();bridge::StableId created;std::string error;
+                widget.rect.x=std::max(12.f,session_->Document().designWidth-304.f);
+                if(!session_->CreateWidget(std::move(widget),false,created,error)){SetStatus(error);break;}
+                SelectWidget(created);RefreshAfterMutation("MINIMAP CREATED // STYLE / FONT OPENS MAP SETTINGS");break;
+            }
             case ScreenToolboxAction::AmmoCounter:
             {
                 std::vector<bridge::StableId> created;std::string error;
@@ -3597,7 +3610,7 @@ namespace renegade::studio
     }
     void RenegadeScreenEditorWorkspace::HandleSelectionShortcuts()
     {
-        if(carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_)return;
+        if(carouselEditorOpen_||liquidEditorOpen_||navigationEditorOpen_||minimapEditorOpen_)return;
         if(!session_||!session_->IsLoaded()||directManipulationMode_!=DirectManipulationMode::None||
             panelDrag_!=PanelDrag::None||!layerDragId_.empty())return;
         const bool ctrl=wi::input::Down(wi::input::KEYBOARD_BUTTON_LCONTROL)||
@@ -3815,6 +3828,15 @@ namespace renegade::studio
     {
         const auto* selected=session_?session_->FindWidget(selectedWidgetId_):nullptr;if(!selected||!selected->navigation)return;
         const auto id=selected->id,document=session_->Document().envelope.documentId,root=gridProjectRoot_;
+        if(selected->navigation->minimap){
+            minimapEditor_->Open(*selected,root,session_->ProjectId(),
+                [this,id,document,root](bridge::ScreenWidget draft,std::string& error){
+                    if(!session_||!session_->IsLoaded()||gridProjectRoot_!=root||session_->Document().envelope.documentId!=document){error="The original Screen is no longer open.";return false;}
+                    draft.id=id;if(!session_->ConfigureNavigationComponent(id,draft,error))return false;
+                    RefreshAfterMutation("Minimap settings saved");return true;
+                },[this]{minimapEditorOpen_=false;if(documentChanged_)documentChanged_();});
+            minimapEditorOpen_=true;return;
+        }
         navigationEditor_->Open(*selected,root,session_->ProjectId(),
             [this,id,document,root](bridge::ScreenWidget draft,std::string& error){
                 if(!session_||!session_->IsLoaded()||gridProjectRoot_!=root||session_->Document().envelope.documentId!=document)

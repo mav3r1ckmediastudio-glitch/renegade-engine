@@ -30,7 +30,7 @@ bool NavTarget(lua_State* l,int at,bridge::NavigationTarget& t,std::string& erro
         {RuntimeScriptEntityReference ref;XMFLOAT3 p;if(!scene||!ReadEntityReferenceForApi(l,-1,ref,error))ok=false;
             else {RuntimeScriptEntityApi api(*scene,entitiesById,generation);if(!api.GetWorldPosition(ref,p,error))ok=false;else {t.entityId=ref.stableId;t.position={p.x,p.y,p.z};}}}
         else if(key=="priority"){const auto v=lua_tonumber(l,-1);if(lua_type(l,-1)!=LUA_TNUMBER||!std::isfinite(v)||std::floor(v)!=v||v< -1000||v>1000)ok=false;else t.priority=int(v);}
-        else if(key=="visible"){if(lua_type(l,-1)!=LUA_TBOOLEAN)ok=false;else t.visible=lua_toboolean(l,-1)!=0;}
+        else if(key=="visible"||key=="minimap_only"){if(lua_type(l,-1)!=LUA_TBOOLEAN)ok=false;else (key=="visible"?t.visible:t.minimapOnly)=lua_toboolean(l,-1)!=0;}
         else {error="Unknown navigation target field: "+key;ok=false;}
         lua_pop(l,1);if(!ok){lua_pop(l,1);if(error.empty())error="Invalid navigation target field: "+key;return false;}
     }
@@ -44,7 +44,22 @@ bool NavPatch(lua_State* l,int at,bridge::ScreenWidget& w,std::string& error)
     {
         const auto key=NavString(l,-2);bool ok=true;
         const auto number=std::find_if(NavNumbers().begin(),NavNumbers().end(),[&](const auto& n){return key==n.key;});
-        if(key=="id"){if(NavString(l,-1)!=w.id)ok=false;}
+        if(c.minimap&&(key=="range"||key=="camera_height"||key=="refresh_hz"||key=="player_size"||key=="resolution"||key=="west"||key=="east"||key=="south"||key=="north")){
+            auto& m=*c.minimap;const auto v=lua_tonumber(l,-1);
+            if(lua_type(l,-1)!=LUA_TNUMBER||!std::isfinite(v)||std::abs(v)>1e7)ok=false;
+            else if(key=="range")m.range=float(v);else if(key=="camera_height")m.cameraHeight=float(v);else if(key=="refresh_hz")m.updateHz=float(v);else if(key=="player_size")m.playerSize=float(v);
+            else if(key=="resolution"){if(v<64||v>4096||std::floor(v)!=v)ok=false;else m.resolution=unsigned(v);}
+            else if(key=="west")m.west=float(v);else if(key=="east")m.east=float(v);else if(key=="south")m.south=float(v);else m.north=float(v);
+        }
+        else if(c.minimap&&(key=="live"||key=="rotate"||key=="round"||key=="clamp_edges"||key=="show_player"||key=="map_key"||key=="show_enemies"||key=="show_quest_givers"||key=="show_vendors"||key=="full_map")){
+            if(lua_type(l,-1)!=LUA_TBOOLEAN)ok=false;else {auto& m=*c.minimap;const bool v=lua_toboolean(l,-1)!=0;
+                if(key=="live")m.live=v;else if(key=="rotate")m.rotate=v;else if(key=="round")m.round=v;else if(key=="clamp_edges")m.clampEdges=v;else if(key=="show_player")m.showPlayer=v;else if(key=="map_key")m.mapKeyEnabled=v;else if(key=="show_enemies")m.showEnemies=v;else if(key=="show_quest_givers")m.showQuestGivers=v;else if(key=="show_vendors")m.showVendors=v;else m.fullMap=v;}
+        }
+        else if(c.minimap&&(key=="map_image"||key=="world_map_image"||key=="player_icon")){
+            const auto path=NavString(l,-1);if(lua_type(l,-1)!=LUA_TSTRING||!NavPath(path,false,error))ok=false;
+            else (key=="map_image"?c.minimap->image:key=="world_map_image"?c.minimap->worldMapImage:c.minimap->playerIcon)=path;
+        }
+        else if(key=="id"){if(NavString(l,-1)!=w.id)ok=false;}
         else if(number!=NavNumbers().end()){const auto v=lua_tonumber(l,-1);if(lua_type(l,-1)!=LUA_TNUMBER||!std::isfinite(v)||std::abs(v)>1e7)ok=false;else c.*(number->member)=float(v);}
         else if(key=="x"||key=="y"||key=="width"||key=="height"||key=="font_size"||key=="opacity"||key=="border_width")
         {const auto v=lua_tonumber(l,-1);if(lua_type(l,-1)!=LUA_TNUMBER||!std::isfinite(v)||std::abs(v)>1e7)ok=false;
@@ -93,7 +108,7 @@ bool NavPatch(lua_State* l,int at,bridge::ScreenWidget& w,std::string& error)
 static int NavigationCreateLua(lua_State* l)
 {
     auto* self=FromUpvalue(l);if(!self||!self->running)return PushNilError(l,"Navigation requires an active Level.");
-    auto w=bridge::MakeWorldNavigationWidget();std::string error;bridge::StableId id;
+    auto w=lua_toboolean(l,lua_upvalueindex(2))?bridge::MakeWorldMinimapWidget():bridge::MakeWorldNavigationWidget();std::string error;bridge::StableId id;
     if(!self->NavPatch(l,1,w,error)||!self->navigation.Create(std::move(w),id,error))return PushNilError(l,error);
     lua_pushlstring(l,id.data(),id.size());return 1;
 }
@@ -150,12 +165,19 @@ static int NavigationGetLua(lua_State* l)
     {
         lua_newtable(l);const auto put=[&](const char* k,const std::string& v){lua_pushlstring(l,v.data(),v.size());lua_setfield(l,-2,k);};
         put("id",t.id);put("label",t.label);put("category",t.category);put("icon",t.icon);
-        lua_pushboolean(l,t.visible);lua_setfield(l,-2,"visible");lua_pushinteger(l,t.priority);lua_setfield(l,-2,"priority");
+        lua_pushboolean(l,t.visible);lua_setfield(l,-2,"visible");lua_pushboolean(l,t.minimapOnly);lua_setfield(l,-2,"minimap_only");lua_pushinteger(l,t.priority);lua_setfield(l,-2,"priority");
         lua_newtable(l);lua_pushnumber(l,t.position.x);lua_setfield(l,-2,"x");lua_pushnumber(l,t.position.y);lua_setfield(l,-2,"y");lua_pushnumber(l,t.position.z);lua_setfield(l,-2,"z");lua_setfield(l,-2,"position");
         if(!t.entityId.empty()){self->PushEntityRef(t.entityId);lua_setfield(l,-2,"entity");}
         lua_rawseti(l,-2,targetIndex++);
     }
     lua_setfield(l,-2,"targets");
+    if(c.minimap){const auto& m=*c.minimap;
+        flag("live",m.live);flag("rotate",m.rotate);flag("round",m.round);flag("clamp_edges",m.clampEdges);flag("show_player",m.showPlayer);flag("map_key",m.mapKeyEnabled);flag("full_map",m.fullMap);
+        flag("show_enemies",m.showEnemies);flag("show_quest_givers",m.showQuestGivers);flag("show_vendors",m.showVendors);
+        num("range",m.range);num("camera_height",m.cameraHeight);num("refresh_hz",m.updateHz);num("player_size",m.playerSize);num("resolution",float(m.resolution));
+        num("west",m.west);num("east",m.east);num("south",m.south);num("north",m.north);
+        str("map_image",m.image);str("world_map_image",m.worldMapImage);str("player_icon",m.playerIcon);
+    }
     flag("visible",w.visible);flag("show_names",c.showNames);flag("show_distance",c.showDistance);flag("show_ticks",c.showTicks);
     lua_newtable(l);for(const auto& [key,path]:c.icons){lua_pushlstring(l,path.data(),path.size());lua_setfield(l,-2,key.c_str());}lua_setfield(l,-2,"icons");
     return 1;
@@ -172,4 +194,27 @@ void RegisterNavigationLua()
     for(const auto& f:funcs){lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,f.function,1);lua_setfield(lua,-2,f.name);}
     for(int i=0;i<2;++i){lua_pushlightuserdata(lua,this);lua_pushboolean(lua,i);lua_pushcclosure(lua,NavigationTargetsLua,2);lua_setfield(lua,-2,i?"remove_target":"put_target");}
     lua_setfield(lua,-2,"navigation");
+}
+
+void RegisterMinimapLua()
+{
+    lua_newtable(lua);lua_pushinteger(lua,1);lua_setfield(lua,-2,"contract_version");
+    lua_pushlightuserdata(lua,this);lua_pushboolean(lua,true);lua_pushcclosure(lua,NavigationCreateLua,2);lua_setfield(lua,-2,"create");
+    struct F{const char* name;lua_CFunction function;};const F funcs[]={{"configure",NavigationConfigureLua},{"get",NavigationGetLua},{"views",NavigationViewsLua},{"remove",NavigationRemoveLua}};
+    for(const auto& f:funcs){lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,f.function,1);lua_setfield(lua,-2,f.name);}
+    for(int i=0;i<2;++i){lua_pushlightuserdata(lua,this);lua_pushboolean(lua,i);lua_pushcclosure(lua,NavigationTargetsLua,2);lua_setfield(lua,-2,i?"remove_target":"put_target");}
+    lua_setfield(lua,-2,"minimap");
+}
+static int WorldMapSetLua(lua_State* l)
+{
+    auto* self=FromUpvalue(l);if(!self||!self->running||!self->worldMapSet)return PushFalseError(l,"World map host is unavailable.");
+    if(lua_gettop(l)!=0)return PushFalseError(l,"Map open/close take no arguments.");std::string error;
+    if(!self->worldMapSet(lua_toboolean(l,lua_upvalueindex(2))!=0,error))return PushFalseError(l,error);lua_pushboolean(l,1);return 1;
+}
+static int WorldMapGetLua(lua_State* l){auto* self=FromUpvalue(l);lua_pushboolean(l,self&&self->worldMapGet&&self->worldMapGet());return 1;}
+void RegisterWorldMapLua()
+{
+    lua_newtable(lua);lua_pushinteger(lua,1);lua_setfield(lua,-2,"contract_version");
+    for(int open=0;open<2;++open){lua_pushlightuserdata(lua,this);lua_pushboolean(lua,open);lua_pushcclosure(lua,WorldMapSetLua,2);lua_setfield(lua,-2,open?"open":"close");}
+    lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,WorldMapGetLua,1);lua_setfield(lua,-2,"is_open");lua_setfield(lua,-2,"map");
 }

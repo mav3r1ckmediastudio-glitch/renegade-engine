@@ -15,6 +15,7 @@
 
 #include "ScreenVideoMatteCS.generated.h"
 #include "ScreenLiquidCS.generated.h"
+#include "ScreenMinimapCS.generated.h"
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -191,6 +192,7 @@ namespace
         std::optional<std::string> carouselCaptionText;
 
         #include "ScreenNavigationDrawing.inl"
+        #include "ScreenMinimapDrawing.inl"
         std::optional<renegade::bridge::LocationAnnouncementFrame> locationFrame;
         bool locationReducedMotion=false;
 
@@ -420,6 +422,7 @@ namespace
             const auto interaction = Interaction();
             auto style = renegade::bridge::ResolveAccessibleScreenStyle(authored.style,authored.kind,accessibility);
             if(locationFrame)style.opacity*=locationSample.opacity;
+            if(authored.navigation&&authored.navigation->minimap){DrawMinimap(canvas,cmd,clipped,style);return;}
             const auto& visual = SelectVisual(style, interaction);
             const float geometryScale = std::min(scaleX, scaleY);
             const float border = std::clamp(
@@ -962,7 +965,7 @@ namespace renegade::screen
         ControlSink controlSink;
         DragSink dragSink;
         ScreenInstanceRoot root;
-        wi::graphics::Shader videoMatteShader,liquidShader;
+        wi::graphics::Shader videoMatteShader,liquidShader,minimapShader;
         std::unique_ptr<ScreenCameraFeed> feed;
         ScreenSurface* cameraSurface=nullptr;
         bool feedAttempted=false;
@@ -1751,6 +1754,8 @@ namespace renegade::screen
         if (!impl_->root.IsVisible()) return;
         for (const auto& surface : impl_->surfaces)
         {
+            surface->MinimapInput(impl_->inputEnabled);
+            surface->UpdateMinimap(impl_->minimapShader);
             surface->UpdateLiquid(impl_->liquidShader,dt,impl_->animation.reducedMotion);
             if(surface->IsVisible() && surface->authored.carousel && surface->carouselOrder.size()>1 &&
                 std::isfinite(dt) && dt>0)
@@ -1847,6 +1852,9 @@ namespace renegade::screen
         if(impl_->feed)target->cameraTexture=impl_->feed->Tick(dt);
     }
 
+    void ScreenRenderer::SetMinimapTextureProvider(MinimapTextureProvider provider)
+    {for(auto& surface:impl_->surfaces)surface->minimapProvider=provider;}
+
     void ScreenRenderer::Reset(wi::RenderPath2D& renderPath) noexcept
     {
         DetachPresentation(renderPath);
@@ -1913,7 +1921,10 @@ namespace renegade::screen
         if(config.headingSource==bridge::NavigationHeadingSource::Manual)surface.authored.navigation->manualHeading=heading;
         auto state=std::make_shared<bridge::WorldNavigationSnapshot>();
         state->camera={true,{},heading};state->player=state->camera;
-        if(config.targets.empty())state->targets={{"sample-quest","Quest","quest","",{15,0,40},10,true},{"sample-town","Town","town","",{-25,0,60},0,true}};
+        if(config.targets.empty()){
+            if(config.minimap){const float range=config.minimap->range;state->targets={{"sample-enemy","Enemy","enemy","",{range*.25f,0,range*.3f},5,true},{"sample-questgiver","Quest giver","questgiver","",{-range*.25f,0,range*.3f},10,true},{"sample-vendor","Vendor","vendor","",{-range*.35f,0,-range*.25f},0,true}};}
+            else state->targets={{"sample-quest","Quest","quest","",{15,0,40},10,true},{"sample-town","Town","town","",{-25,0,60},0,true}};
+        }
         surface.navigationSnapshot=std::move(state);surface.navigationPreview=true;error.clear();return true;
     }
     bool ScreenRenderer::SetNavigationState(const bridge::WorldNavigationSnapshot& state,bool includeCreated,std::string& error)

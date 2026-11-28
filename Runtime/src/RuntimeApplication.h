@@ -46,6 +46,7 @@
 #include "RuntimeUiAccessibilityPreferences.h"
 #include "renegade/bridge/HudContextEventRules.h"
 #include "RuntimeHudSession.h"
+#include "renegade/bridge/MinimapCameraService.h"
 #include "renegade/bridge/HudSelection.h"
 #include "RuntimeScriptRuntime.h"
 #include "RuntimeInventorySession.h"
@@ -249,7 +250,12 @@ namespace renegade::runtime
         RuntimePropModelResidency propModels_;
         void RefreshUiBindingSources();
         void UpdateUiBindings();
-        void UpdateWorldNavigation();
+        void UpdateWorldNavigation(float dt);
+        bool SetWorldMapOpen(bool open,std::string& error);
+        RuntimeHudSession worldMapOverlay_;
+        bool worldMapOpen_=false,worldMapWasPaused_=false,worldMapCloseRequested_=false;
+        bridge::MinimapCameraService minimapCameras_;
+        std::set<std::string> actorNavigationTargets_;
         void UpdateLiveDiagnostics();
         std::uint64_t lastDiagnosticSampleMs_ = 0;
         std::uint64_t lastDiagnosticProjectileLaunched_ = 0;
