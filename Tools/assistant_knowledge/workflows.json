@@ -46,7 +46,7 @@
         {
           "path": "docs/ARCHITECTURE.md",
           "needle": "Creator steps: select an object; choose Surface Type directly in its Inspector.",
-          "sha256": "0428cb0d3f478564d32fc6f0c2ea2f3bf8399415d0e558e46e35d000dd24b945"
+          "sha256": "47d5a088e3df2542328059245d7e32863f83149905614e1d6da67fbf05a1bc0c"
         },
         {
           "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",

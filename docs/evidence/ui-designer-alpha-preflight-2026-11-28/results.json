@@ -1,0 +1,281 @@
+{
+  "code_candidate": "3fa45577b1e9da5d9b88bb7be394f3f1820709d9",
+  "base": "4e26d75cc78b75575c2a458aeb938e1dd8c3870c",
+  "platform": "Windows x64 DX12 on DESIGN",
+  "builds": {
+    "Release": {
+      "build": {
+        "status": "passed",
+        "exit_code": 0,
+        "seconds": 159.21
+      },
+      "ctest": {
+        "status": "passed",
+        "exit_code": 0,
+        "seconds": 310.29
+      },
+      "startup": {
+        "status": "passed",
+        "exit_code": 0,
+        "seconds": 0.06
+      }
+    },
+    "Debug": {
+      "build": {
+        "status": "passed",
+        "exit_code": 0,
+        "seconds": 491.17
+      },
+      "ctest": {
+        "status": "passed",
+        "exit_code": 0,
+        "seconds": 1027.07
+      },
+      "startup": {
+        "status": "passed",
+        "exit_code": 0,
+        "seconds": 0.14
+      }
+    }
+  },
+  "ctest_counts": {
+    "Release": 356,
+    "Debug": 340
+  },
+  "source_contract_count": 61,
+  "ci_target_graph": {
+    "Debug": {
+      "registered_executable_targets": 255,
+      "reachable_targets": 305,
+      "missing": []
+    },
+    "Release": {
+      "registered_executable_targets": 255,
+      "reachable_targets": 305,
+      "missing": []
+    }
+  },
+  "frame_guard_mutations": {
+    "baseline": {
+      "exit_code": 0,
+      "expected_accept": true
+    },
+    "double_gameplay": {
+      "exit_code": 1,
+      "expected_accept": false
+    },
+    "double_loading": {
+      "exit_code": 1,
+      "expected_accept": false
+    },
+    "loading_world_time": {
+      "exit_code": 1,
+      "expected_accept": false
+    },
+    "loading_fallthrough": {
+      "exit_code": 1,
+      "expected_accept": false
+    }
+  },
+  "clean_assets": {
+    "wicked_pin": "82557d439a41d104f559b0d3134d160b7bf6154e",
+    "packages": [
+      {
+        "package": "AnimatedVial",
+        "verified_files": [
+          "Content/UI/Prefab.renegade-screen",
+          "Content/UI/Vial/interior_mask.png",
+          "Content/UI/Vial/static_art.png"
+        ]
+      },
+      {
+        "package": "LiquidFill",
+        "verified_files": [
+          "Content/UI/Prefab.renegade-screen",
+          "Content/UI/Mask.png"
+        ]
+      },
+      {
+        "package": "WorldNavigation",
+        "verified_files": [
+          "Content/UI/Prefab.renegade-screen"
+        ]
+      },
+      {
+        "package": "WorldNavigationFantasy",
+        "verified_files": [
+          "Content/UI/Prefab.renegade-screen",
+          "Content/UI/Assets/5.png",
+          "Content/UI/Assets/1.png",
+          "Content/UI/Assets/10.png",
+          "Content/UI/Assets/0.png",
+          "Content/UI/Assets/2.png",
+          "Content/UI/Assets/3.png",
+          "Content/UI/Assets/4.png",
+          "Content/UI/Assets/6.png",
+          "Content/UI/Assets/7.png",
+          "Content/UI/Assets/8.png",
+          "Content/UI/Assets/9.png",
+          "Content/UI/Assets/11.png",
+          "Content/UI/Assets/12.png",
+          "Content/UI/Assets/13.png",
+          "Content/UI/Assets/14.png",
+          "Content/UI/Assets/15.png",
+          "Content/UI/Assets/16.png",
+          "Content/UI/Assets/17.png"
+        ]
+      }
+    ]
+  },
+  "packages": {
+    "Release": {
+      "status": "PASS",
+      "relocatedStudioStartup": 0,
+      "stockUiResources": "PASS",
+      "dependencyProcessRuns": 2,
+      "assetRegistryProcessRuns": 4,
+      "studio": {
+        "path": "RenegadeStudio.exe",
+        "bytes": 39080448,
+        "sha256": "324776f94d066d4164118b43995bbe3702da1f379c6e22b4450ed284549f59b9"
+      },
+      "runtime": {
+        "path": "RenegadeRuntime.exe",
+        "bytes": 67051520,
+        "sha256": "1dd8694a8f88cbf4312edf8f9e05cc2f7d71d8b79891235f4cab909d3ce480fb"
+      },
+      "studioPackage": {
+        "path": "RenegadeStudio-Release.zip",
+        "bytes": 369143057,
+        "sha256": "66dbfad91b176d51e3c7892019e04767b2a028eead775a46df791e4c5dffab7d"
+      },
+      "runtimePackage": {
+        "path": "RenegadeRuntime-Release.zip",
+        "bytes": 161306427,
+        "sha256": "bc03f93a607e5a5754d21a8eac702149306eb5db1d6adb1dd557c7c9234a3433"
+      }
+    },
+    "Debug": {
+      "status": "PASS",
+      "relocatedStudioStartup": 0,
+      "stockUiResources": "PASS",
+      "dependencyProcessRuns": 2,
+      "assetRegistryProcessRuns": 4,
+      "studio": {
+        "path": "RenegadeStudio.exe",
+        "bytes": 93802496,
+        "sha256": "e615cbcb9763ad2397d1e8f8777eb37a3b0af9ab0b8c0210615d6e7ded0041c7"
+      },
+      "runtime": {
+        "path": "RenegadeRuntime.exe",
+        "bytes": 116760064,
+        "sha256": "5c07df776fd70d0f13e8a957adf24e6cc68ab8eee36ae7559ec8523ec3c1aafb"
+      },
+      "studioPackage": {
+        "path": "RenegadeStudio-Debug.zip",
+        "bytes": 397360486,
+        "sha256": "bead071e792a73db85b3def39828c1c34b82911805655d980364a615d3af5d2d"
+      },
+      "runtimePackage": {
+        "path": "RenegadeRuntime-Debug.zip",
+        "bytes": 167475461,
+        "sha256": "c894c0725e3dd702918376628f0f935b3c46417d15ba5d32a1bcd69ca0f39f7b"
+      }
+    }
+  },
+  "archive_integrity": [
+    {
+      "archive": "RenegadeStudio-Release.zip",
+      "status": "PASS",
+      "files": 469,
+      "checks": [
+        "complete staged-file inventory",
+        "all entry sizes",
+        "all entry CRCs",
+        "no duplicate entries"
+      ]
+    },
+    {
+      "archive": "RenegadeRuntime-Release.zip",
+      "status": "PASS",
+      "files": 125,
+      "checks": [
+        "complete staged-file inventory",
+        "all entry sizes",
+        "all entry CRCs",
+        "no duplicate entries"
+      ]
+    },
+    {
+      "archive": "RenegadeStudio-Debug.zip",
+      "status": "PASS",
+      "files": 469,
+      "checks": [
+        "complete staged-file inventory",
+        "all entry sizes",
+        "all entry CRCs",
+        "no duplicate entries"
+      ]
+    },
+    {
+      "archive": "RenegadeRuntime-Debug.zip",
+      "status": "PASS",
+      "files": 125,
+      "checks": [
+        "complete staged-file inventory",
+        "all entry sizes",
+        "all entry CRCs",
+        "no duplicate entries"
+      ]
+    }
+  ],
+  "limits": [
+    "Implementation commit tested locally; final documentation commit will have a different SHA.",
+    "No hosted CI result or independent exact-commit release acceptance claimed.",
+    "Canonical package proofs do not replace every feature-specific exported-game visual check.",
+    "Wizard and tooltip coverage are separate follow-up work."
+  ],
+  "observed_failure": {
+    "test": "RenegadeMaximumTerrainGPU_preview",
+    "first_full_debug_result": "339/340; one access violation before the second preview draw",
+    "code_changed_during_investigation": false,
+    "cause": "unconfirmed; open native terrain-preview stability observation",
+    "original_scene_sha256": "2dec873e8d5e86af9f2c237e8c8560ca1f5d21612e46e2d88fc7eef5d5db6e8b",
+    "proof_executable_sha256": "be9b27ce252c671f45b89c678567222a1aaffdb7283065ef209285c41c34a554",
+    "debugger_replay": "PASS",
+    "fresh_process_replays": [
+      {
+        "iteration": 1,
+        "exit_code": 0,
+        "seconds": 52.63
+      },
+      {
+        "iteration": 2,
+        "exit_code": 0,
+        "seconds": 51.62
+      },
+      {
+        "iteration": 3,
+        "exit_code": 0,
+        "seconds": 49.72
+      },
+      {
+        "iteration": 4,
+        "exit_code": 0,
+        "seconds": 55.93
+      },
+      {
+        "iteration": 5,
+        "exit_code": 0,
+        "seconds": 54.01
+      }
+    ],
+    "original_order_four_case_replay": {
+      "exit_code": 0,
+      "seconds": 427.42,
+      "candidate": "3fa45577b1e9da5d9b88bb7be394f3f1820709d9"
+    },
+    "complete_debug_rerun": "340/340 PASS with native crash capture enabled",
+    "evidence_scope": "Passing replays do not identify the original cause. Preview service/proof files are unchanged versus main."
+  }
+}

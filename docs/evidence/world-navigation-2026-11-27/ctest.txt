@@ -1,4 +1,4 @@
-Test project C:/Users/paulw/AppData/Local/RenegadeWork/DesignerBackground1127/BUILD/creator
+Test project <checkout>/BUILD/creator
       Start 175: StudioUiPolicy
  1/10 Test #175: StudioUiPolicy ........................   Passed    0.02 sec
       Start 207: RenegadeWeatherLuaRuntimeTests

@@ -2663,3 +2663,8 @@ ScreenHurtDrawing is shared by private Studio preview and Runtime. Procedural sm
 The governed renegade.hurt contract exposes creation, atomic configuration, state, removal and explicit presentation-only hit/clear. It never uses hurt.hit to mutate health. Sixteen views/eight hits bound the service. No vendor source/gitlink change is part of this feature. See UI_PLAYER_HURT_FEEDBACK.md.
 
 Hurt viewport correction: shared render-item layout maps hurt rectangles to actual output dimensions independently of the ordinary HUD canvas transform. Full-design overlays cover mismatched-aspect viewport edges; partial rectangles retain proportional placement. Embedded previews add their viewport origin normally. See evidence/player-hurt-bounds-2026-11-28.
+
+
+## UI button audio export closure (28 November 2026)
+
+MakeProjectDependencyReader treats an existing ButtonSounds.rui-audio sidecar as required project Data and its configured default/per-button clips as required Audio. The sidecar is resolved inside the project before reading. Missing clips and malformed settings remain explicit dependency failures; an absent optional sidecar preserves prior projects. Studio, Test Game and Build Game therefore consume the same authored sound settings rather than relying on editor-only file discovery. ProjectUiScaffoldTests exercises the production collector.

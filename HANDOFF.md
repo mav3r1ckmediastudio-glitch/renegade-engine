@@ -1,3 +1,7 @@
+# UI Designer alpha integrated preflight | 28 November 2026
+
+Implementation `3fa45577b1e9da5d9b88bb7be394f3f1820709d9` has passed full isolated Release/Debug aggregate builds, unfiltered CTest 356/356 and 340/340, startup checks and canonical Studio/Runtime packaging with LP05/LC01 process proofs. See docs/evidence/ui-designer-alpha-preflight-2026-11-28/README.md and results.json for exact hashes, commands, repairs and limits. Final documentation has a later SHA; hosted CI must validate the final PR head before merge. Wizard and common tooltips remain a separate next PR. One initial large-terrain Debug preview access violation remains undiagnosed after passing debugger, repeated native, ordered-chain and full-suite replays; see the evidence report. Earlier feature-specific pending statements below retain their checkpoint scope; this section supersedes their broad Debug/build-package status, without inventing new exported-feature visual evidence or independent release acceptance.
+
 # Hurt overlay viewport correction | 28 November 2026
 
 Owner rejected the uncovered screen edges after 5a4e94580e81de25a7656ebed79baa1f8a4b24be. The overlay inherited Fit canvas margins. ScreenRenderer/src/ScreenRenderer.cpp now stretches hurt component geometry proportionally to the actual viewport while preserving ordinary HUD layout and editable partial hurt regions. Tests/ScreenRendererTests.cpp covers five mismatched aspects plus embedded origins across Fit/Fill/Stretch.
