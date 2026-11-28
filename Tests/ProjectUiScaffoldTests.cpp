@@ -1,3 +1,5 @@
+#include "renegade/bridge/ScreenClickSound.h"
+#include "renegade/bridge/DependencyService.h"
 #include "RuntimeScriptRuntime.h"
 #include "RuntimeBootstrap.h"
 #include "RuntimeFlow.h"
@@ -215,6 +217,47 @@ int main(int argc,char** argv)
     check(!orphan.ApplyStep(noSession,fresh,resume,error)&&noSession.CurrentPath().empty(),"Missing retained session fails explicitly");
     if(!fixture)
     {
+        // Exercise the real project reader and production dependency collector:
+        // Build Game must retain click settings and both default/local clips.
+        {
+            const std::string defaultClip="Content/Audio/UI/default.wav",localClip="Content/Audio/UI/local.wav";
+            fs::create_directories(root/"Content/Audio/UI");
+            const unsigned char wave[]={'R','I','F','F',38,0,0,0,'W','A','V','E','f','m','t',' ',16,0,0,0,
+                1,0,1,0,0x44,0xac,0,0,0x88,0x58,1,0,2,0,16,0,'d','a','t','a',2,0,0,0,0,0};
+            for(const auto& clip:{defaultClip,localClip})
+                std::ofstream(root/clip,std::ios::binary).write(reinterpret_cast<const char*>(wave),sizeof(wave));
+            bridge::ScreenClickSounds sounds;sounds.projectDefault=defaultClip;
+            sounds.buttons[{bridge::GenerateStableId(),bridge::GenerateStableId()}]=localClip;
+            check(sounds.Save(metadata.rootPath,error),"Save project click settings for export: "+error);
+            bridge::ProjectDependencyProvider provider(bridge::MakeProjectDependencyReader());
+            const auto collect=[&](bridge::DependencyGraph& result){
+                bridge::DependencyCollector collector(metadata.rootPath);
+                if(!collector.RegisterProvider(provider,error)||
+                   !collector.AddRoot({fs::u8path(metadata.descriptorPath).filename().generic_u8string(),
+                     bridge::DependencyClass::ProjectDocument,bridge::DependencyRequirement::Required,"click export test"},error)||
+                   !collector.DiscoverTransitiveDependencies(error))return false;
+                result=collector.Graph();return true;
+            };
+            bridge::DependencyGraph clickGraph;
+            check(collect(clickGraph),"Collect project click dependencies: "+error);
+            const auto has=[&](const std::string& path,bridge::DependencyClass type){
+                return std::any_of(clickGraph.nodes.begin(),clickGraph.nodes.end(),[&](const auto& node){
+                    return node.projectRelativePath==path&&node.dependencyClass==type&&node.requirement==bridge::DependencyRequirement::Required;});
+            };
+            check(has("Content/UI/ButtonSounds.rui-audio",bridge::DependencyClass::Data)&&
+                  has(defaultClip,bridge::DependencyClass::Audio)&&has(localClip,bridge::DependencyClass::Audio),
+                  "Build Game omitted project click settings or default/local audio");
+            fs::rename(root/localClip,root/"local.offline");bridge::DependencyGraph missing;
+            check(collect(missing)&&std::any_of(missing.diagnostics.begin(),missing.diagnostics.end(),[&](const auto& d){
+                return d.code==bridge::DependencyDiagnosticCode::Missing&&d.path==localClip;}),
+                "Missing click clip was not a dependency diagnostic");
+            fs::rename(root/"local.offline",root/localClip);
+            {std::ofstream corrupt(bridge::ScreenClickSounds::Path(metadata.rootPath));corrupt<<"broken settings";}
+            bridge::ProjectDependencyDocument rejected;
+            check(!bridge::MakeProjectDependencyReader()(metadata.descriptorPath,rejected,error),
+                "Malformed click settings silently omitted from Build Game");
+            check(sounds.Save(metadata.rootPath,error),"Restore valid click settings");
+        }
         std::map<std::string,std::string> targets;
         bridge::ScreenDocument menu;
         std::map<std::string,std::string> previousIds;
